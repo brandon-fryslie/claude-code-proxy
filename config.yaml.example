@@ -1,91 +1,34 @@
 # LLM Proxy Configuration Example
-# This file demonstrates all available configuration options
-# Copy this file to config.yaml and customize as needed
-
-# Server configuration
-server:
-  # Port to listen on (default: 3001)
-  port: 3001
-  
-  # Timeout configurations
-  timeouts:
-    # Maximum duration for reading the entire request, including the body
-    read: 10m
-    
-    # Maximum duration before timing out writes of the response
-    write: 10m
-    
-    # Maximum amount of time to wait for the next request when keep-alives are enabled
-    idle: 10m
 
 # Provider configurations
+# New style: allows declaring arbitrary providers and their "format" will be either "openai" or "anthropic"
 providers:
-  # Anthropic Claude configuration
   anthropic:
-    # Base URL for Anthropic API (can be changed for custom endpoints)
     base_url: "https://api.anthropic.com"
-    
-    # Maximum number of retries for failed requests
     max_retries: 3
+    format: "anthropic" # required
+
+  zai:
+    base_url: "https://api.z.ai/api/anthropic"
+    api_key: "xxx"
+    format: "anthropic" # required
   
-  # OpenAI configuration
   openai:
-    # API key for OpenAI
-    # Can also be set via OPENAI_API_KEY environment variable
-    # api_key: "..."
-    
-    # Base URL for OpenAI API (can be changed for custom endpoints)
-    # Can also be set via OPENAI_BASE_URL environment variable
-    # base_url: "https://api.openai.com"
+    api_key: "..."
+    base_url: "https://api.openai.com"
+    format: "openai" #required
 
-# Storage configuration
-storage:
-  # SQLite database path for storing request history
-  db_path: "requests.db"
-  
-  # Directory for storing request files (if needed in future)
-  # requests_dir: "./requests"
+  localllm:
+    base_url: "localhost:1234"
+    format: "openai" # required 
 
-# Subagent Configuration (Optional)
-# Enable this feature if you want to route specific Claude Code agents to different LLM providers
-# For subagent setup instructions, see: https://docs.anthropic.com/en/docs/claude-code/sub-agents
+# Subagent Configuration
+# New style: We must refer to the specific provider as well as the model
 subagents:
-  # Enable subagent routing (default: false)
-  enable: false
-  
-  # Maps subagent types to specific models
-  # Only used when enable: true
   mappings:
-    # Code review specialist (example)
-    # code-reviewer: "gpt-4o"
-    
-    # Data analysis expert (example)
-    # data-analyst: "o3"
-    
-    # Documentation writer (example)
-    # doc-writer: "gpt-3.5-turbo"
+    # <agent name>: "<provider name>:<model name>"
+    code-reviewer: "openai:gpt-4o"
+    planner: "localllm:my-local-agent"
+    janitor: "zai:glm-4.6"
 
-# Environment variable overrides:
-# The following environment variables will override the YAML configuration:
-#
-# Server:
-#   PORT                      - Server port
-#   READ_TIMEOUT             - Read timeout duration
-#   WRITE_TIMEOUT            - Write timeout duration
-#   IDLE_TIMEOUT             - Idle timeout duration
-#
-# Anthropic:
-#   ANTHROPIC_FORWARD_URL    - Anthropic base URL
-#   ANTHROPIC_VERSION        - Anthropic API version
-#   ANTHROPIC_MAX_RETRIES    - Maximum retries for Anthropic requests
-#
-# OpenAI:
-#   OPENAI_API_KEY           - OpenAI API key
-#   OPENAI_BASE_URL          - OpenAI base URL
-#
-# Storage:
-#   DB_PATH                  - Database file path
-#
-# Subagents:
-#   SUBAGENT_MAPPINGS        - Comma-separated subagent:model pairs
-#                              Example: "code-reviewer:claude-3-5-sonnet"
+# NOTE: OLD CONFIGS ARE NOT SUPPORTED.

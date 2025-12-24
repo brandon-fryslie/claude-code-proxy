@@ -727,6 +727,15 @@ export default function Index() {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <h1 className="text-lg font-semibold text-gray-900">Claude Code Monitor</h1>
+              <a
+                href="http://localhost:5174"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2.5 py-1 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded transition-colors flex items-center space-x-1"
+              >
+                <Sparkles className="w-3 h-3" />
+                <span>New Dashboard</span>
+              </a>
             </div>
             <div className="flex items-center space-x-2">
               {viewMode === "requests" && (

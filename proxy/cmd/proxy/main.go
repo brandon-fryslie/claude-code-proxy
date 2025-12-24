@@ -27,16 +27,27 @@ func main() {
 		logger.Fatalf("❌ Failed to load configuration: %v", err)
 	}
 
-	// Initialize providers
+	// Initialize providers dynamically based on format
 	providers := make(map[string]provider.Provider)
-	providers["anthropic"] = provider.NewAnthropicProvider(&cfg.Providers.Anthropic)
-	providers["openai"] = provider.NewOpenAIProvider(&cfg.Providers.OpenAI)
+	for name, providerCfg := range cfg.Providers {
+		switch providerCfg.Format {
+		case "anthropic":
+			providers[name] = provider.NewAnthropicProvider(name, providerCfg)
+			logger.Printf("📡 Initialized Anthropic-format provider: %s (%s)", name, providerCfg.BaseURL)
+		case "openai":
+			providers[name] = provider.NewOpenAIProvider(name, providerCfg)
+			logger.Printf("📡 Initialized OpenAI-format provider: %s (%s)", name, providerCfg.BaseURL)
+		default:
+			logger.Printf("⚠️  Unknown provider format '%s' for provider '%s', skipping", providerCfg.Format, name)
+		}
+	}
+
+	if len(providers) == 0 {
+		logger.Fatalf("❌ No providers configured. Please configure at least one provider in config.yaml")
+	}
 
 	// Initialize model router
 	modelRouter := service.NewModelRouter(cfg, providers, logger)
-
-	// Use legacy anthropic service for backward compatibility
-	anthropicService := service.NewAnthropicService(&cfg.Anthropic)
 
 	// Use SQLite storage
 	storageService, err := service.NewSQLiteStorageService(&cfg.Storage)
@@ -45,7 +56,7 @@ func main() {
 	}
 	logger.Println("🗿 SQLite database ready")
 
-	h := handler.New(anthropicService, storageService, logger, modelRouter)
+	h := handler.New(storageService, logger, modelRouter)
 
 	r := mux.NewRouter()
 
@@ -71,6 +82,10 @@ func main() {
 	r.HandleFunc("/api/stats", h.GetStats).Methods("GET")
 	r.HandleFunc("/api/stats/hourly", h.GetHourlyStats).Methods("GET")
 	r.HandleFunc("/api/stats/models", h.GetModelStats).Methods("GET")
+	r.HandleFunc("/api/stats/providers", h.GetProviderStats).Methods("GET")
+	r.HandleFunc("/api/stats/subagents", h.GetSubagentStats).Methods("GET")
+	r.HandleFunc("/api/stats/tools", h.GetToolStats).Methods("GET")
+	r.HandleFunc("/api/stats/performance", h.GetPerformanceStats).Methods("GET")
 	r.HandleFunc("/api/requests", h.DeleteRequests).Methods("DELETE")
 	r.HandleFunc("/api/conversations", h.GetConversations).Methods("GET")
 	r.HandleFunc("/api/conversations/{id}", h.GetConversationByID).Methods("GET")

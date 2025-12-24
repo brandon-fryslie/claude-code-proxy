@@ -4,7 +4,7 @@
 
 set -e
 
-echo "🚀 Claude Code Monitor - Starting Services"
+echo "Claude Code Monitor - Starting Services"
 echo "========================================="
 
 # Colors for output
@@ -15,24 +15,24 @@ NC='\033[0m' # No Color
 
 # Check if Go is installed
 if ! command -v go &> /dev/null; then
-    echo "❌ Go is not installed. Please install Go 1.20 or higher."
+    echo "Go is not installed. Please install Go 1.20 or higher."
     exit 1
 fi
 
 # Check if Node.js is installed
 if ! command -v node &> /dev/null; then
-    echo "❌ Node.js is not installed. Please install Node.js 18 or higher."
+    echo "Node.js is not installed. Please install Node.js 18 or higher."
     exit 1
 fi
 
 # Check for .env file
 if [ ! -f .env ]; then
-    echo -e "${YELLOW}⚠️  No .env file found. Creating from .env.example...${NC}"
+    echo -e "${YELLOW}No .env file found. Creating from .env.example...${NC}"
     if [ -f .env.example ]; then
         cp .env.example .env
-        echo -e "${GREEN}✅ Created .env file.${NC}"
+        echo -e "${GREEN}Created .env file.${NC}"
     else
-        echo "❌ No .env.example file found."
+        echo "No .env.example file found."
         exit 1
     fi
 fi
@@ -40,50 +40,67 @@ fi
 # Function to cleanup on exit
 cleanup() {
     echo -e "\n${YELLOW}Shutting down services...${NC}"
-    kill $PROXY_PID $WEB_PID 2>/dev/null || true
+    kill $PROXY_PID $WEB_PID $DASHBOARD_PID 2>/dev/null || true
     exit
 }
 
 trap cleanup EXIT INT TERM
 
 # Build and start proxy server
-echo -e "\n${BLUE}📦 Building proxy server...${NC}"
+echo -e "\n${BLUE}Building proxy server...${NC}"
 cd proxy
 go mod download
 go build -o ../bin/proxy cmd/proxy/main.go
 cd ..
 
-echo -e "${GREEN}✅ Proxy server built${NC}"
+echo -e "${GREEN}Proxy server built${NC}"
 
 # Install web dependencies if needed
 if [ ! -d "web/node_modules" ]; then
-    echo -e "\n${BLUE}📦 Installing web dependencies...${NC}"
+    echo -e "\n${BLUE}Installing web dependencies...${NC}"
     cd web
-    npm install
+    pnpm install
     cd ..
-    echo -e "${GREEN}✅ Web dependencies installed${NC}"
+    echo -e "${GREEN}Web dependencies installed${NC}"
+fi
+
+# Install dashboard dependencies if needed
+if [ ! -d "dashboard/node_modules" ]; then
+    echo -e "\n${BLUE}Installing dashboard dependencies...${NC}"
+    cd dashboard
+    pnpm install
+    cd ..
+    echo -e "${GREEN}Dashboard dependencies installed${NC}"
 fi
 
 # Start proxy server
-echo -e "\n${BLUE}🚀 Starting proxy server on port 3001...${NC}"
+echo -e "\n${BLUE}Starting proxy server on port 3001...${NC}"
 ./bin/proxy &
 PROXY_PID=$!
 
 # Wait for proxy to start
 sleep 2
 
-# Start web server
-echo -e "${BLUE}🚀 Starting web interface on port 5173...${NC}"
+# Start legacy web server
+echo -e "${BLUE}Starting web interface on port 5173...${NC}"
 cd web
-npm run dev &
+pnpm run dev &
 WEB_PID=$!
 cd ..
 
-echo -e "\n${GREEN}✨ All services started!${NC}"
+# Start new dashboard
+echo -e "${BLUE}Starting new dashboard on port 5174...${NC}"
+cd dashboard
+pnpm run dev &
+DASHBOARD_PID=$!
+cd ..
+
+echo -e "\n${GREEN}All services started!${NC}"
 echo "========================================="
-echo -e "📊 Web Dashboard: ${BLUE}http://localhost:5173${NC}"
-echo -e "🔌 API Proxy: ${BLUE}http://localhost:3001${NC}"
-echo -e "💚 Health Check: ${BLUE}http://localhost:3001/health${NC}"
+echo -e "Web Dashboard:  ${BLUE}http://localhost:5173${NC}"
+echo -e "New Dashboard:  ${BLUE}http://localhost:5174${NC}"
+echo -e "API Proxy:      ${BLUE}http://localhost:3001${NC}"
+echo -e "Health Check:   ${BLUE}http://localhost:3001/health${NC}"
 echo "========================================="
 echo -e "${YELLOW}Press Ctrl+C to stop all services${NC}\n"
 

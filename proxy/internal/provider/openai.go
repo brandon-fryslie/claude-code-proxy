@@ -18,12 +18,14 @@ import (
 )
 
 type OpenAIProvider struct {
+	name   string
 	client *http.Client
-	config *config.OpenAIProviderConfig
+	config *config.ProviderConfig
 }
 
-func NewOpenAIProvider(cfg *config.OpenAIProviderConfig) Provider {
+func NewOpenAIProvider(name string, cfg *config.ProviderConfig) Provider {
 	return &OpenAIProvider{
+		name: name,
 		client: &http.Client{
 			Timeout: 300 * time.Second, // 5 minutes timeout
 		},
@@ -32,7 +34,7 @@ func NewOpenAIProvider(cfg *config.OpenAIProviderConfig) Provider {
 }
 
 func (p *OpenAIProvider) Name() string {
-	return "openai"
+	return p.name
 }
 
 func (p *OpenAIProvider) ForwardRequest(ctx context.Context, originalReq *http.Request) (*http.Response, error) {

@@ -34,6 +34,10 @@ type RequestLog struct {
 	Model         string              `json:"model,omitempty"`
 	OriginalModel string              `json:"originalModel,omitempty"`
 	RoutedModel   string              `json:"routedModel,omitempty"`
+	Provider      string              `json:"provider,omitempty"`      // Which provider handled this request
+	SubagentName  string              `json:"subagentName,omitempty"`  // Matched subagent definition name
+	ToolsUsed     []string            `json:"toolsUsed,omitempty"`     // List of tool names from request
+	ToolCallCount int                 `json:"toolCallCount,omitempty"` // Number of tool calls in response
 	UserAgent     string              `json:"userAgent"`
 	ContentType   string              `json:"contentType"`
 	PromptGrade   *PromptGrade        `json:"promptGrade,omitempty"`
@@ -49,8 +53,13 @@ type RequestSummary struct {
 	Model         string          `json:"model,omitempty"`
 	OriginalModel string          `json:"originalModel,omitempty"`
 	RoutedModel   string          `json:"routedModel,omitempty"`
+	Provider      string          `json:"provider,omitempty"`
+	SubagentName  string          `json:"subagentName,omitempty"`
+	ToolsUsed     []string        `json:"toolsUsed,omitempty"`
+	ToolCallCount int             `json:"toolCallCount,omitempty"`
 	StatusCode    int             `json:"statusCode,omitempty"`
 	ResponseTime  int64           `json:"responseTime,omitempty"`
+	FirstByteTime int64           `json:"firstByteTime,omitempty"` // Time to first token (streaming)
 	Usage         *AnthropicUsage `json:"usage,omitempty"`
 }
 
@@ -60,9 +69,11 @@ type ResponseLog struct {
 	Body            json.RawMessage     `json:"body,omitempty"`
 	BodyText        string              `json:"bodyText,omitempty"`
 	ResponseTime    int64               `json:"responseTime"`
+	FirstByteTime   int64               `json:"firstByteTime,omitempty"` // Time to first token (streaming)
 	StreamingChunks []string            `json:"streamingChunks,omitempty"`
 	IsStreaming     bool                `json:"isStreaming"`
 	CompletedAt     string              `json:"completedAt"`
+	ToolCallCount   int                 `json:"toolCallCount,omitempty"` // Number of tool_use blocks in response
 }
 
 type ChatMessage struct {
@@ -250,4 +261,71 @@ type ModelTokens struct {
 	Model    string `json:"model"`
 	Tokens   int64  `json:"tokens"`
 	Requests int    `json:"requests"`
+}
+
+// Provider analytics
+type ProviderStats struct {
+	Provider      string `json:"provider"`
+	Requests      int    `json:"requests"`
+	InputTokens   int64  `json:"inputTokens"`
+	OutputTokens  int64  `json:"outputTokens"`
+	TotalTokens   int64  `json:"totalTokens"`
+	AvgResponseMs int64  `json:"avgResponseMs"`
+	ErrorCount    int    `json:"errorCount"`
+}
+
+type ProviderStatsResponse struct {
+	Providers []ProviderStats `json:"providers"`
+	StartTime string          `json:"startTime"`
+	EndTime   string          `json:"endTime"`
+}
+
+// Subagent analytics
+type SubagentStats struct {
+	SubagentName  string `json:"subagentName"`
+	Provider      string `json:"provider"`
+	TargetModel   string `json:"targetModel"`
+	Requests      int    `json:"requests"`
+	InputTokens   int64  `json:"inputTokens"`
+	OutputTokens  int64  `json:"outputTokens"`
+	TotalTokens   int64  `json:"totalTokens"`
+	AvgResponseMs int64  `json:"avgResponseMs"`
+}
+
+type SubagentStatsResponse struct {
+	Subagents []SubagentStats `json:"subagents"`
+	StartTime string          `json:"startTime"`
+	EndTime   string          `json:"endTime"`
+}
+
+// Tool analytics
+type ToolStats struct {
+	ToolName     string `json:"toolName"`
+	UsageCount   int    `json:"usageCount"`   // How many requests included this tool
+	CallCount    int    `json:"callCount"`    // How many times tool was called in responses
+	AvgCallsPerRequest float64 `json:"avgCallsPerRequest"`
+}
+
+type ToolStatsResponse struct {
+	Tools     []ToolStats `json:"tools"`
+	StartTime string      `json:"startTime"`
+	EndTime   string      `json:"endTime"`
+}
+
+// Performance analytics
+type PerformanceStats struct {
+	Provider       string  `json:"provider"`
+	Model          string  `json:"model"`
+	AvgResponseMs  int64   `json:"avgResponseMs"`
+	P50ResponseMs  int64   `json:"p50ResponseMs"`
+	P95ResponseMs  int64   `json:"p95ResponseMs"`
+	P99ResponseMs  int64   `json:"p99ResponseMs"`
+	AvgFirstByteMs int64   `json:"avgFirstByteMs"`
+	RequestCount   int     `json:"requestCount"`
+}
+
+type PerformanceStatsResponse struct {
+	Stats     []PerformanceStats `json:"stats"`
+	StartTime string             `json:"startTime"`
+	EndTime   string             `json:"endTime"`
 }

@@ -23,18 +23,16 @@ import (
 )
 
 type Handler struct {
-	anthropicService    service.AnthropicService
 	storageService      service.StorageService
 	conversationService service.ConversationService
 	modelRouter         *service.ModelRouter
 	logger              *log.Logger
 }
 
-func New(anthropicService service.AnthropicService, storageService service.StorageService, logger *log.Logger, modelRouter *service.ModelRouter) *Handler {
+func New(storageService service.StorageService, logger *log.Logger, modelRouter *service.ModelRouter) *Handler {
 	conversationService := service.NewConversationService()
 
 	return &Handler{
-		anthropicService:    anthropicService,
 		storageService:      storageService,
 		conversationService: conversationService,
 		modelRouter:         modelRouter,
@@ -75,6 +73,12 @@ func (h *Handler) Messages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Extract tools used from request
+	var toolsUsed []string
+	for _, tool := range req.Tools {
+		toolsUsed = append(toolsUsed, tool.Name)
+	}
+
 	// Create request log with routing information
 	requestLog := &model.RequestLog{
 		RequestID:     requestID,
@@ -86,6 +90,9 @@ func (h *Handler) Messages(w http.ResponseWriter, r *http.Request) {
 		Model:         decision.OriginalModel,
 		OriginalModel: decision.OriginalModel,
 		RoutedModel:   decision.TargetModel,
+		Provider:      decision.ProviderName,
+		SubagentName:  decision.SubagentName,
+		ToolsUsed:     toolsUsed,
 		UserAgent:     r.Header.Get("User-Agent"),
 		ContentType:   r.Header.Get("Content-Type"),
 	}
@@ -403,6 +410,90 @@ func (h *Handler) GetLatestRequestDate(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// GetProviderStats returns analytics broken down by provider
+func (h *Handler) GetProviderStats(w http.ResponseWriter, r *http.Request) {
+	startTime := r.URL.Query().Get("start")
+	endTime := r.URL.Query().Get("end")
+
+	if startTime == "" || endTime == "" {
+		http.Error(w, "start and end parameters are required", http.StatusBadRequest)
+		return
+	}
+
+	stats, err := h.storageService.GetProviderStats(startTime, endTime)
+	if err != nil {
+		log.Printf("Error getting provider stats: %v", err)
+		http.Error(w, "Failed to get provider stats", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(stats)
+}
+
+// GetSubagentStats returns analytics broken down by subagent
+func (h *Handler) GetSubagentStats(w http.ResponseWriter, r *http.Request) {
+	startTime := r.URL.Query().Get("start")
+	endTime := r.URL.Query().Get("end")
+
+	if startTime == "" || endTime == "" {
+		http.Error(w, "start and end parameters are required", http.StatusBadRequest)
+		return
+	}
+
+	stats, err := h.storageService.GetSubagentStats(startTime, endTime)
+	if err != nil {
+		log.Printf("Error getting subagent stats: %v", err)
+		http.Error(w, "Failed to get subagent stats", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(stats)
+}
+
+// GetToolStats returns analytics broken down by tool usage
+func (h *Handler) GetToolStats(w http.ResponseWriter, r *http.Request) {
+	startTime := r.URL.Query().Get("start")
+	endTime := r.URL.Query().Get("end")
+
+	if startTime == "" || endTime == "" {
+		http.Error(w, "start and end parameters are required", http.StatusBadRequest)
+		return
+	}
+
+	stats, err := h.storageService.GetToolStats(startTime, endTime)
+	if err != nil {
+		log.Printf("Error getting tool stats: %v", err)
+		http.Error(w, "Failed to get tool stats", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(stats)
+}
+
+// GetPerformanceStats returns response time analytics with percentiles
+func (h *Handler) GetPerformanceStats(w http.ResponseWriter, r *http.Request) {
+	startTime := r.URL.Query().Get("start")
+	endTime := r.URL.Query().Get("end")
+
+	if startTime == "" || endTime == "" {
+		http.Error(w, "start and end parameters are required", http.StatusBadRequest)
+		return
+	}
+
+	stats, err := h.storageService.GetPerformanceStats(startTime, endTime)
+	if err != nil {
+		log.Printf("Error getting performance stats: %v", err)
+		http.Error(w, "Failed to get performance stats", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(stats)
+}
+
 func (h *Handler) DeleteRequests(w http.ResponseWriter, r *http.Request) {
 
 	clearedCount, err := h.storageService.ClearRequests()
@@ -461,12 +552,18 @@ func (h *Handler) handleStreamingResponse(w http.ResponseWriter, resp *http.Resp
 	var messageID string
 	var modelName string
 	var stopReason string
+	var firstByteTime int64
 
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line == "" || !strings.HasPrefix(line, "data:") {
 			continue
+		}
+
+		// Track time to first byte (first actual data)
+		if firstByteTime == 0 {
+			firstByteTime = time.Since(startTime).Milliseconds()
 		}
 
 		streamingChunks = append(streamingChunks, line)
@@ -558,8 +655,10 @@ func (h *Handler) handleStreamingResponse(w http.ResponseWriter, resp *http.Resp
 		Headers:         SanitizeHeaders(resp.Header),
 		StreamingChunks: streamingChunks,
 		ResponseTime:    time.Since(startTime).Milliseconds(),
+		FirstByteTime:   firstByteTime,
 		IsStreaming:     true,
 		CompletedAt:     time.Now().Format(time.RFC3339),
+		ToolCallCount:   len(toolCalls),
 	}
 
 	// Create a structured response body that matches Anthropic's format
@@ -629,6 +728,15 @@ func (h *Handler) handleNonStreamingResponse(w http.ResponseWriter, resp *http.R
 		if err := json.Unmarshal(responseBytes, &anthropicResp); err == nil {
 			// Successfully parsed - store the structured response
 			responseLog.Body = json.RawMessage(responseBytes)
+
+			// Count tool_use blocks in response content
+			toolCallCount := 0
+			for _, block := range anthropicResp.Content {
+				if block.Type == "tool_use" {
+					toolCallCount++
+				}
+			}
+			responseLog.ToolCallCount = toolCallCount
 		} else {
 			// If parsing fails, store as text but log the error
 			log.Printf("⚠️ Failed to parse Anthropic response: %v", err)

@@ -23,4 +23,11 @@ type StorageService interface {
 	GetHourlyStats(startTime, endTime string) (*model.HourlyStatsResponse, error)
 	GetModelStats(startTime, endTime string) (*model.ModelStatsResponse, error)
 	GetLatestRequestDate() (*time.Time, error)
+	Close() error
+
+	// New analytics endpoints
+	GetProviderStats(startTime, endTime string) (*model.ProviderStatsResponse, error)
+	GetSubagentStats(startTime, endTime string) (*model.SubagentStatsResponse, error)
+	GetToolStats(startTime, endTime string) (*model.ToolStatsResponse, error)
+	GetPerformanceStats(startTime, endTime string) (*model.PerformanceStatsResponse, error)
 }

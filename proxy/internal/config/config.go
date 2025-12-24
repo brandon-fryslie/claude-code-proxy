@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -11,11 +12,10 @@ import (
 )
 
 type Config struct {
-	Server    ServerConfig    `yaml:"server"`
-	Providers ProvidersConfig `yaml:"providers"`
-	Storage   StorageConfig   `yaml:"storage"`
-	Subagents SubagentsConfig `yaml:"subagents"`
-	Anthropic AnthropicConfig
+	Server    ServerConfig               `yaml:"server"`
+	Providers map[string]*ProviderConfig `yaml:"providers"`
+	Storage   StorageConfig              `yaml:"storage"`
+	Subagents SubagentsConfig            `yaml:"subagents"`
 }
 
 type ServerConfig struct {
@@ -33,26 +33,13 @@ type TimeoutsConfig struct {
 	Idle  string `yaml:"idle"`
 }
 
-type ProvidersConfig struct {
-	Anthropic AnthropicProviderConfig `yaml:"anthropic"`
-	OpenAI    OpenAIProviderConfig    `yaml:"openai"`
-}
-
-type AnthropicProviderConfig struct {
-	BaseURL    string `yaml:"base_url"`
-	Version    string `yaml:"version"`
-	MaxRetries int    `yaml:"max_retries"`
-}
-
-type OpenAIProviderConfig struct {
-	BaseURL string `yaml:"base_url"`
-	APIKey  string `yaml:"api_key"`
-}
-
-type AnthropicConfig struct {
-	BaseURL    string
-	Version    string
-	MaxRetries int
+// ProviderConfig is the unified configuration for all providers
+type ProviderConfig struct {
+	Format     string `yaml:"format"`     // Required: "anthropic" or "openai"
+	BaseURL    string `yaml:"base_url"`   // Required: API base URL
+	APIKey     string `yaml:"api_key"`    // Optional: API key (required for some providers)
+	Version    string `yaml:"version"`    // Optional: API version (for Anthropic-format providers)
+	MaxRetries int    `yaml:"max_retries"` // Optional: Max retry attempts
 }
 
 type StorageConfig struct {
@@ -62,7 +49,7 @@ type StorageConfig struct {
 
 type SubagentsConfig struct {
 	Enable   bool              `yaml:"enable"`
-	Mappings map[string]string `yaml:"mappings"`
+	Mappings map[string]string `yaml:"mappings"` // agentName -> "provider:model"
 }
 
 func Load() (*Config, error) {
@@ -85,15 +72,12 @@ func Load() (*Config, error) {
 			WriteTimeout: 600 * time.Second,
 			IdleTimeout:  600 * time.Second,
 		},
-		Providers: ProvidersConfig{
-			Anthropic: AnthropicProviderConfig{
+		Providers: map[string]*ProviderConfig{
+			"anthropic": {
+				Format:     "anthropic",
 				BaseURL:    "https://api.anthropic.com",
 				Version:    "2023-06-01",
 				MaxRetries: 3,
-			},
-			OpenAI: OpenAIProviderConfig{
-				BaseURL: "https://api.openai.com",
-				APIKey:  "",
 			},
 		},
 		Storage: StorageConfig{
@@ -136,35 +120,32 @@ func Load() (*Config, error) {
 		cfg.Server.IdleTimeout = getDuration("IDLE_TIMEOUT", cfg.Server.IdleTimeout)
 	}
 
-	// Override Anthropic settings
-	if envURL := os.Getenv("ANTHROPIC_FORWARD_URL"); envURL != "" {
-		cfg.Providers.Anthropic.BaseURL = envURL
-	}
-	if envVersion := os.Getenv("ANTHROPIC_VERSION"); envVersion != "" {
-		cfg.Providers.Anthropic.Version = envVersion
-	}
-	if envRetries := os.Getenv("ANTHROPIC_MAX_RETRIES"); envRetries != "" {
-		cfg.Providers.Anthropic.MaxRetries = getInt("ANTHROPIC_MAX_RETRIES", cfg.Providers.Anthropic.MaxRetries)
+	// Override Anthropic provider settings if env vars are set and provider exists
+	if anthropicCfg, exists := cfg.Providers["anthropic"]; exists {
+		if envURL := os.Getenv("ANTHROPIC_FORWARD_URL"); envURL != "" {
+			anthropicCfg.BaseURL = envURL
+		}
+		if envVersion := os.Getenv("ANTHROPIC_VERSION"); envVersion != "" {
+			anthropicCfg.Version = envVersion
+		}
+		if envRetries := os.Getenv("ANTHROPIC_MAX_RETRIES"); envRetries != "" {
+			anthropicCfg.MaxRetries = getInt("ANTHROPIC_MAX_RETRIES", anthropicCfg.MaxRetries)
+		}
 	}
 
-	// Override OpenAI settings
-	if envURL := os.Getenv("OPENAI_BASE_URL"); envURL != "" {
-		cfg.Providers.OpenAI.BaseURL = envURL
-	}
-	if envKey := os.Getenv("OPENAI_API_KEY"); envKey != "" {
-		cfg.Providers.OpenAI.APIKey = envKey
+	// Override OpenAI provider settings if env vars are set and provider exists
+	if openaiCfg, exists := cfg.Providers["openai"]; exists {
+		if envURL := os.Getenv("OPENAI_BASE_URL"); envURL != "" {
+			openaiCfg.BaseURL = envURL
+		}
+		if envKey := os.Getenv("OPENAI_API_KEY"); envKey != "" {
+			openaiCfg.APIKey = envKey
+		}
 	}
 
 	// Override storage settings
 	if envPath := os.Getenv("DB_PATH"); envPath != "" {
 		cfg.Storage.DBPath = envPath
-	}
-
-	// Sync legacy Anthropic config
-	cfg.Anthropic = AnthropicConfig{
-		BaseURL:    cfg.Providers.Anthropic.BaseURL,
-		Version:    cfg.Providers.Anthropic.Version,
-		MaxRetries: cfg.Providers.Anthropic.MaxRetries,
 	}
 
 	// After loading from file, apply any timeout conversions if needed
@@ -184,14 +165,27 @@ func Load() (*Config, error) {
 		}
 	}
 
-	// Sync legacy Anthropic config with new structure
-	cfg.Anthropic = AnthropicConfig{
-		BaseURL:    cfg.Providers.Anthropic.BaseURL,
-		Version:    cfg.Providers.Anthropic.Version,
-		MaxRetries: cfg.Providers.Anthropic.MaxRetries,
+	// Validate provider configurations
+	if err := cfg.validateProviders(); err != nil {
+		return nil, err
 	}
 
 	return cfg, nil
+}
+
+func (c *Config) validateProviders() error {
+	for name, provider := range c.Providers {
+		if provider.Format == "" {
+			return fmt.Errorf("provider '%s' is missing required 'format' field (must be 'anthropic' or 'openai')", name)
+		}
+		if provider.Format != "anthropic" && provider.Format != "openai" {
+			return fmt.Errorf("provider '%s' has invalid format '%s' (must be 'anthropic' or 'openai')", name, provider.Format)
+		}
+		if provider.BaseURL == "" {
+			return fmt.Errorf("provider '%s' is missing required 'base_url' field", name)
+		}
+	}
+	return nil
 }
 
 func (c *Config) loadFromFile(path string) error {

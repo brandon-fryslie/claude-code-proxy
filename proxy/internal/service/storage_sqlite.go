@@ -41,31 +41,90 @@ func NewSQLiteStorageService(cfg *config.StorageConfig) (StorageService, error) 
 }
 
 func (s *sqliteStorageService) createTables() error {
-	schema := `
-	CREATE TABLE IF NOT EXISTS requests (
-		id TEXT PRIMARY KEY,
-		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-		method TEXT NOT NULL,
-		endpoint TEXT NOT NULL,
-		headers TEXT NOT NULL,
-		body TEXT NOT NULL,
-		user_agent TEXT,
-		content_type TEXT,
-		prompt_grade TEXT,
-		response TEXT,
-		model TEXT,
-		original_model TEXT,
-		routed_model TEXT,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);
+	// Check if table exists
+	var tableExists int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='requests'").Scan(&tableExists)
+	if err != nil {
+		return fmt.Errorf("failed to check if table exists: %w", err)
+	}
 
-	CREATE INDEX IF NOT EXISTS idx_timestamp ON requests(timestamp DESC);
-	CREATE INDEX IF NOT EXISTS idx_endpoint ON requests(endpoint);
-	CREATE INDEX IF NOT EXISTS idx_model ON requests(model);
-	`
+	if tableExists == 0 {
+		// Fresh database - create table with all columns including new ones
+		schema := `
+		CREATE TABLE requests (
+			id TEXT PRIMARY KEY,
+			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+			method TEXT NOT NULL,
+			endpoint TEXT NOT NULL,
+			headers TEXT NOT NULL,
+			body TEXT NOT NULL,
+			user_agent TEXT,
+			content_type TEXT,
+			prompt_grade TEXT,
+			response TEXT,
+			model TEXT,
+			original_model TEXT,
+			routed_model TEXT,
+			provider TEXT,
+			subagent_name TEXT,
+			tools_used TEXT,
+			tool_call_count INTEGER DEFAULT 0,
+			input_tokens INTEGER DEFAULT 0,
+			output_tokens INTEGER DEFAULT 0,
+			cache_read_tokens INTEGER DEFAULT 0,
+			cache_creation_tokens INTEGER DEFAULT 0,
+			response_time_ms INTEGER DEFAULT 0,
+			first_byte_time_ms INTEGER DEFAULT 0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
 
-	_, err := s.db.Exec(schema)
-	return err
+		CREATE INDEX idx_timestamp ON requests(timestamp DESC);
+		CREATE INDEX idx_endpoint ON requests(endpoint);
+		CREATE INDEX idx_model ON requests(model);
+		CREATE INDEX idx_provider ON requests(provider);
+		CREATE INDEX idx_subagent ON requests(subagent_name);
+		CREATE INDEX idx_timestamp_provider ON requests(timestamp DESC, provider);
+		`
+		_, err := s.db.Exec(schema)
+		if err != nil {
+			return fmt.Errorf("failed to create table: %w", err)
+		}
+	} else {
+		// Existing database - run migrations to add new columns
+		if err := s.runMigrations(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *sqliteStorageService) runMigrations() error {
+	// Add new columns if they don't exist (for existing databases)
+	migrations := []string{
+		"ALTER TABLE requests ADD COLUMN provider TEXT",
+		"ALTER TABLE requests ADD COLUMN subagent_name TEXT",
+		"ALTER TABLE requests ADD COLUMN tools_used TEXT",
+		"ALTER TABLE requests ADD COLUMN tool_call_count INTEGER DEFAULT 0",
+		"ALTER TABLE requests ADD COLUMN input_tokens INTEGER DEFAULT 0",
+		"ALTER TABLE requests ADD COLUMN output_tokens INTEGER DEFAULT 0",
+		"ALTER TABLE requests ADD COLUMN cache_read_tokens INTEGER DEFAULT 0",
+		"ALTER TABLE requests ADD COLUMN cache_creation_tokens INTEGER DEFAULT 0",
+		"ALTER TABLE requests ADD COLUMN response_time_ms INTEGER DEFAULT 0",
+		"ALTER TABLE requests ADD COLUMN first_byte_time_ms INTEGER DEFAULT 0",
+	}
+
+	for _, migration := range migrations {
+		// Ignore errors - column may already exist
+		s.db.Exec(migration)
+	}
+
+	// Create new indexes (ignore errors if they exist)
+	s.db.Exec("CREATE INDEX IF NOT EXISTS idx_provider ON requests(provider)")
+	s.db.Exec("CREATE INDEX IF NOT EXISTS idx_subagent ON requests(subagent_name)")
+	s.db.Exec("CREATE INDEX IF NOT EXISTS idx_timestamp_provider ON requests(timestamp DESC, provider)")
+
+	return nil
 }
 
 func (s *sqliteStorageService) SaveRequest(request *model.RequestLog) (string, error) {
@@ -79,9 +138,14 @@ func (s *sqliteStorageService) SaveRequest(request *model.RequestLog) (string, e
 		return "", fmt.Errorf("failed to marshal body: %w", err)
 	}
 
+	toolsUsedJSON, err := json.Marshal(request.ToolsUsed)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal tools_used: %w", err)
+	}
+
 	query := `
-		INSERT INTO requests (id, timestamp, method, endpoint, headers, body, user_agent, content_type, model, original_model, routed_model)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO requests (id, timestamp, method, endpoint, headers, body, user_agent, content_type, model, original_model, routed_model, provider, subagent_name, tools_used, tool_call_count)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err = s.db.Exec(query,
@@ -96,6 +160,10 @@ func (s *sqliteStorageService) SaveRequest(request *model.RequestLog) (string, e
 		request.Model,
 		request.OriginalModel,
 		request.RoutedModel,
+		request.Provider,
+		request.SubagentName,
+		string(toolsUsedJSON),
+		request.ToolCallCount,
 	)
 
 	if err != nil {
@@ -222,8 +290,52 @@ func (s *sqliteStorageService) UpdateRequestWithResponse(request *model.RequestL
 		return fmt.Errorf("failed to marshal response: %w", err)
 	}
 
-	query := "UPDATE requests SET response = ? WHERE id = ?"
-	_, err = s.db.Exec(query, string(responseJSON), request.RequestID)
+	// Extract token counts and timing from response for indexed columns
+	var inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens int
+	var responseTimeMs, firstByteTimeMs int64
+	var toolCallCount int
+
+	if request.Response != nil {
+		responseTimeMs = request.Response.ResponseTime
+		firstByteTimeMs = request.Response.FirstByteTime
+		toolCallCount = request.Response.ToolCallCount
+
+		// Extract usage from response body
+		if request.Response.Body != nil {
+			var respBody struct {
+				Usage *model.AnthropicUsage `json:"usage"`
+			}
+			if err := json.Unmarshal(request.Response.Body, &respBody); err == nil && respBody.Usage != nil {
+				inputTokens = respBody.Usage.InputTokens
+				outputTokens = respBody.Usage.OutputTokens
+				cacheReadTokens = respBody.Usage.CacheReadInputTokens
+				cacheCreationTokens = respBody.Usage.CacheCreationInputTokens
+			}
+		}
+	}
+
+	query := `UPDATE requests SET
+		response = ?,
+		input_tokens = ?,
+		output_tokens = ?,
+		cache_read_tokens = ?,
+		cache_creation_tokens = ?,
+		response_time_ms = ?,
+		first_byte_time_ms = ?,
+		tool_call_count = ?
+		WHERE id = ?`
+
+	_, err = s.db.Exec(query,
+		string(responseJSON),
+		inputTokens,
+		outputTokens,
+		cacheReadTokens,
+		cacheCreationTokens,
+		responseTimeMs,
+		firstByteTimeMs,
+		toolCallCount,
+		request.RequestID,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to update request with response: %w", err)
 	}
@@ -871,4 +983,281 @@ func (s *sqliteStorageService) GetLatestRequestDate() (*time.Time, error) {
 
 func (s *sqliteStorageService) Close() error {
 	return s.db.Close()
+}
+
+// GetProviderStats returns analytics broken down by provider
+func (s *sqliteStorageService) GetProviderStats(startTime, endTime string) (*model.ProviderStatsResponse, error) {
+	query := `
+		SELECT
+			COALESCE(provider, 'unknown') as provider,
+			COUNT(*) as requests,
+			SUM(input_tokens) as input_tokens,
+			SUM(output_tokens) as output_tokens,
+			AVG(response_time_ms) as avg_response_ms,
+			response
+		FROM requests
+		WHERE datetime(timestamp) >= datetime(?) AND datetime(timestamp) <= datetime(?)
+		GROUP BY provider
+	`
+
+	rows, err := s.db.Query(query, startTime, endTime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query provider stats: %w", err)
+	}
+	defer rows.Close()
+
+	var providers []model.ProviderStats
+	for rows.Next() {
+		var stat model.ProviderStats
+		var inputTokens, outputTokens sql.NullInt64
+		var avgResponseMs sql.NullFloat64
+		var responseJSON sql.NullString
+
+		if err := rows.Scan(&stat.Provider, &stat.Requests, &inputTokens, &outputTokens, &avgResponseMs, &responseJSON); err != nil {
+			continue
+		}
+
+		if inputTokens.Valid {
+			stat.InputTokens = inputTokens.Int64
+		}
+		if outputTokens.Valid {
+			stat.OutputTokens = outputTokens.Int64
+		}
+		stat.TotalTokens = stat.InputTokens + stat.OutputTokens
+		if avgResponseMs.Valid {
+			stat.AvgResponseMs = int64(avgResponseMs.Float64)
+		}
+
+		providers = append(providers, stat)
+	}
+
+	return &model.ProviderStatsResponse{
+		Providers: providers,
+		StartTime: startTime,
+		EndTime:   endTime,
+	}, nil
+}
+
+// GetSubagentStats returns analytics broken down by subagent
+func (s *sqliteStorageService) GetSubagentStats(startTime, endTime string) (*model.SubagentStatsResponse, error) {
+	query := `
+		SELECT
+			COALESCE(subagent_name, '') as subagent_name,
+			COALESCE(provider, 'unknown') as provider,
+			COALESCE(routed_model, model) as target_model,
+			COUNT(*) as requests,
+			SUM(input_tokens) as input_tokens,
+			SUM(output_tokens) as output_tokens,
+			AVG(response_time_ms) as avg_response_ms
+		FROM requests
+		WHERE datetime(timestamp) >= datetime(?) AND datetime(timestamp) <= datetime(?)
+		  AND subagent_name IS NOT NULL AND subagent_name != ''
+		GROUP BY subagent_name, provider, target_model
+	`
+
+	rows, err := s.db.Query(query, startTime, endTime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query subagent stats: %w", err)
+	}
+	defer rows.Close()
+
+	var subagents []model.SubagentStats
+	for rows.Next() {
+		var stat model.SubagentStats
+		var inputTokens, outputTokens sql.NullInt64
+		var avgResponseMs sql.NullFloat64
+
+		if err := rows.Scan(&stat.SubagentName, &stat.Provider, &stat.TargetModel, &stat.Requests, &inputTokens, &outputTokens, &avgResponseMs); err != nil {
+			continue
+		}
+
+		if inputTokens.Valid {
+			stat.InputTokens = inputTokens.Int64
+		}
+		if outputTokens.Valid {
+			stat.OutputTokens = outputTokens.Int64
+		}
+		stat.TotalTokens = stat.InputTokens + stat.OutputTokens
+		if avgResponseMs.Valid {
+			stat.AvgResponseMs = int64(avgResponseMs.Float64)
+		}
+
+		subagents = append(subagents, stat)
+	}
+
+	return &model.SubagentStatsResponse{
+		Subagents: subagents,
+		StartTime: startTime,
+		EndTime:   endTime,
+	}, nil
+}
+
+// GetToolStats returns analytics broken down by tool usage
+func (s *sqliteStorageService) GetToolStats(startTime, endTime string) (*model.ToolStatsResponse, error) {
+	query := `
+		SELECT tools_used, tool_call_count
+		FROM requests
+		WHERE datetime(timestamp) >= datetime(?) AND datetime(timestamp) <= datetime(?)
+		  AND tools_used IS NOT NULL AND tools_used != '[]' AND tools_used != 'null'
+	`
+
+	rows, err := s.db.Query(query, startTime, endTime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query tool stats: %w", err)
+	}
+	defer rows.Close()
+
+	toolUsageCount := make(map[string]int)  // How many requests included this tool
+	toolCallCount := make(map[string]int)   // Total calls across all requests
+
+	for rows.Next() {
+		var toolsUsedJSON string
+		var callCount int
+
+		if err := rows.Scan(&toolsUsedJSON, &callCount); err != nil {
+			continue
+		}
+
+		var tools []string
+		if err := json.Unmarshal([]byte(toolsUsedJSON), &tools); err != nil {
+			continue
+		}
+
+		// Count each tool's presence in this request
+		for _, tool := range tools {
+			if tool != "" {
+				toolUsageCount[tool]++
+			}
+		}
+	}
+
+	var toolStats []model.ToolStats
+	for toolName, usageCount := range toolUsageCount {
+		stat := model.ToolStats{
+			ToolName:   toolName,
+			UsageCount: usageCount,
+			CallCount:  toolCallCount[toolName],
+		}
+		if usageCount > 0 {
+			stat.AvgCallsPerRequest = float64(toolCallCount[toolName]) / float64(usageCount)
+		}
+		toolStats = append(toolStats, stat)
+	}
+
+	return &model.ToolStatsResponse{
+		Tools:     toolStats,
+		StartTime: startTime,
+		EndTime:   endTime,
+	}, nil
+}
+
+// GetPerformanceStats returns response time analytics by provider/model
+func (s *sqliteStorageService) GetPerformanceStats(startTime, endTime string) (*model.PerformanceStatsResponse, error) {
+	query := `
+		SELECT
+			COALESCE(provider, 'unknown') as provider,
+			COALESCE(model, 'unknown') as model,
+			response_time_ms,
+			first_byte_time_ms
+		FROM requests
+		WHERE datetime(timestamp) >= datetime(?) AND datetime(timestamp) <= datetime(?)
+		  AND response_time_ms > 0
+		ORDER BY provider, model
+	`
+
+	rows, err := s.db.Query(query, startTime, endTime)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query performance stats: %w", err)
+	}
+	defer rows.Close()
+
+	// Collect response times by provider+model
+	type key struct {
+		provider string
+		model    string
+	}
+	responseTimes := make(map[key][]int64)
+	firstByteTimes := make(map[key][]int64)
+
+	for rows.Next() {
+		var provider, modelName string
+		var responseTimeMs, firstByteTimeMs int64
+
+		if err := rows.Scan(&provider, &modelName, &responseTimeMs, &firstByteTimeMs); err != nil {
+			continue
+		}
+
+		k := key{provider: provider, model: modelName}
+		responseTimes[k] = append(responseTimes[k], responseTimeMs)
+		if firstByteTimeMs > 0 {
+			firstByteTimes[k] = append(firstByteTimes[k], firstByteTimeMs)
+		}
+	}
+
+	var stats []model.PerformanceStats
+	for k, times := range responseTimes {
+		if len(times) == 0 {
+			continue
+		}
+
+		// Sort for percentile calculation
+		sortedTimes := make([]int64, len(times))
+		copy(sortedTimes, times)
+		sortInt64Slice(sortedTimes)
+
+		stat := model.PerformanceStats{
+			Provider:      k.provider,
+			Model:         k.model,
+			RequestCount:  len(times),
+			AvgResponseMs: avgInt64(times),
+			P50ResponseMs: percentileInt64(sortedTimes, 50),
+			P95ResponseMs: percentileInt64(sortedTimes, 95),
+			P99ResponseMs: percentileInt64(sortedTimes, 99),
+		}
+
+		if fbt, exists := firstByteTimes[k]; exists && len(fbt) > 0 {
+			stat.AvgFirstByteMs = avgInt64(fbt)
+		}
+
+		stats = append(stats, stat)
+	}
+
+	return &model.PerformanceStatsResponse{
+		Stats:     stats,
+		StartTime: startTime,
+		EndTime:   endTime,
+	}, nil
+}
+
+// Helper functions for statistics
+func sortInt64Slice(s []int64) {
+	for i := 0; i < len(s)-1; i++ {
+		for j := i + 1; j < len(s); j++ {
+			if s[i] > s[j] {
+				s[i], s[j] = s[j], s[i]
+			}
+		}
+	}
+}
+
+func avgInt64(s []int64) int64 {
+	if len(s) == 0 {
+		return 0
+	}
+	var sum int64
+	for _, v := range s {
+		sum += v
+	}
+	return sum / int64(len(s))
+}
+
+func percentileInt64(sorted []int64, p int) int64 {
+	if len(sorted) == 0 {
+		return 0
+	}
+	idx := (len(sorted) * p) / 100
+	if idx >= len(sorted) {
+		idx = len(sorted) - 1
+	}
+	return sorted[idx]
 }

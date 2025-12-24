@@ -15,12 +15,14 @@ import (
 )
 
 type AnthropicProvider struct {
+	name   string
 	client *http.Client
-	config *config.AnthropicProviderConfig
+	config *config.ProviderConfig
 }
 
-func NewAnthropicProvider(cfg *config.AnthropicProviderConfig) Provider {
+func NewAnthropicProvider(name string, cfg *config.ProviderConfig) Provider {
 	return &AnthropicProvider{
+		name: name,
 		client: &http.Client{
 			Timeout: 300 * time.Second, // 5 minutes timeout
 		},
@@ -29,7 +31,7 @@ func NewAnthropicProvider(cfg *config.AnthropicProviderConfig) Provider {
 }
 
 func (p *AnthropicProvider) Name() string {
-	return "anthropic"
+	return p.name
 }
 
 func (p *AnthropicProvider) ForwardRequest(ctx context.Context, originalReq *http.Request) (*http.Response, error) {
@@ -62,8 +64,17 @@ func (p *AnthropicProvider) ForwardRequest(ctx context.Context, originalReq *htt
 	removeHopByHopHeaders(proxyReq.Header)
 
 	// Add required headers if not present
+	version := p.config.Version
+	if version == "" {
+		version = "2023-06-01" // Default Anthropic API version
+	}
 	if proxyReq.Header.Get("anthropic-version") == "" {
-		proxyReq.Header.Set("anthropic-version", p.config.Version)
+		proxyReq.Header.Set("anthropic-version", version)
+	}
+
+	// If this provider has its own API key, use it (override the original)
+	if p.config.APIKey != "" {
+		proxyReq.Header.Set("x-api-key", p.config.APIKey)
 	}
 
 	// Support gzip encoding

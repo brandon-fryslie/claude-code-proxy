@@ -16,14 +16,22 @@ import (
 // RoutingDecision contains the result of routing analysis
 type RoutingDecision struct {
 	Provider      provider.Provider
+	ProviderName  string // Name of the provider (e.g., "anthropic", "openai")
 	OriginalModel string
 	TargetModel   string
+	SubagentName  string // Name of matched subagent, if any
+}
+
+// SubagentMapping contains the parsed provider:model mapping
+type SubagentMapping struct {
+	ProviderName string
+	ModelName    string
 }
 
 type ModelRouter struct {
 	config             *config.Config
 	providers          map[string]provider.Provider
-	subagentMappings   map[string]string             // agentName -> targetModel
+	subagentMappings   map[string]SubagentMapping    // agentName -> {provider, model}
 	customAgentPrompts map[string]SubagentDefinition // promptHash -> definition
 	logger             *log.Logger
 }
@@ -36,10 +44,33 @@ type SubagentDefinition struct {
 }
 
 func NewModelRouter(cfg *config.Config, providers map[string]provider.Provider, logger *log.Logger) *ModelRouter {
+	// Parse subagent mappings from "provider:model" format
+	parsedMappings := make(map[string]SubagentMapping)
+	for agentName, mapping := range cfg.Subagents.Mappings {
+		parts := strings.SplitN(mapping, ":", 2)
+		if len(parts) != 2 {
+			logger.Printf("⚠️  Invalid subagent mapping for '%s': '%s' (expected format: 'provider:model')", agentName, mapping)
+			continue
+		}
+		providerName := strings.TrimSpace(parts[0])
+		modelName := strings.TrimSpace(parts[1])
+
+		// Validate that the provider exists
+		if _, exists := providers[providerName]; !exists {
+			logger.Printf("⚠️  Subagent '%s' references unknown provider '%s'", agentName, providerName)
+			continue
+		}
+
+		parsedMappings[agentName] = SubagentMapping{
+			ProviderName: providerName,
+			ModelName:    modelName,
+		}
+	}
+
 	router := &ModelRouter{
 		config:             cfg,
 		providers:          providers,
-		subagentMappings:   cfg.Subagents.Mappings,
+		subagentMappings:   parsedMappings,
 		customAgentPrompts: make(map[string]SubagentDefinition),
 		logger:             logger,
 	}
@@ -74,7 +105,7 @@ func (r *ModelRouter) extractStaticPrompt(systemPrompt string) string {
 }
 
 func (r *ModelRouter) loadCustomAgents() {
-	for agentName, targetModel := range r.subagentMappings {
+	for agentName, mapping := range r.subagentMappings {
 		// Try loading from project level first, then user level
 		paths := []string{
 			fmt.Sprintf(".claude/agents/%s.md", agentName),
@@ -98,13 +129,10 @@ func (r *ModelRouter) loadCustomAgents() {
 				staticPrompt := r.extractStaticPrompt(systemPrompt)
 				hash := r.hashString(staticPrompt)
 
-				// Determine provider for the target model
-				providerName := r.getProviderNameForModel(targetModel)
-
 				r.customAgentPrompts[hash] = SubagentDefinition{
 					Name:           agentName,
-					TargetModel:    targetModel,
-					TargetProvider: providerName,
+					TargetModel:    mapping.ModelName,
+					TargetProvider: mapping.ProviderName,
 					FullPrompt:     staticPrompt,
 				}
 				found = true
@@ -114,7 +142,7 @@ func (r *ModelRouter) loadCustomAgents() {
 
 		// Log warning if subagent is mapped but definition not found
 		if !found {
-			r.logger.Printf("⚠️  Subagent '%s' is mapped to '%s' but definition file not found in:\n", agentName, targetModel)
+			r.logger.Printf("⚠️  Subagent '%s' is mapped to '%s:%s' but definition file not found in:\n", agentName, mapping.ProviderName, mapping.ModelName)
 			for _, path := range paths {
 				r.logger.Printf("      - %s\n", path)
 			}
@@ -128,8 +156,8 @@ func (r *ModelRouter) loadCustomAgents() {
 		r.logger.Println("──────────────────────────────────────")
 
 		for _, def := range r.customAgentPrompts {
-			r.logger.Printf("   \033[36m%s\033[0m → \033[32m%s\033[0m",
-				def.Name, def.TargetModel)
+			r.logger.Printf("   \033[36m%s\033[0m → \033[33m%s\033[0m:\033[32m%s\033[0m",
+				def.Name, def.TargetProvider, def.TargetModel)
 		}
 
 		r.logger.Println("──────────────────────────────────────")
@@ -146,11 +174,12 @@ func (r *ModelRouter) DetermineRoute(req *model.AnthropicRequest) (*RoutingDecis
 
 	// Check if subagents are enabled
 	if !r.config.Subagents.Enable {
-		// Subagents disabled, use default provider
-		providerName := r.getProviderNameForModel(decision.TargetModel)
+		// Subagents disabled, use default provider based on model name
+		providerName := r.getDefaultProviderForModel(decision.TargetModel)
 		decision.Provider = r.providers[providerName]
+		decision.ProviderName = providerName
 		if decision.Provider == nil {
-			return nil, fmt.Errorf("no provider found for model %s", decision.TargetModel)
+			return nil, fmt.Errorf("no provider found for model %s (tried '%s')", decision.TargetModel, providerName)
 		}
 		return decision, nil
 	}
@@ -172,11 +201,13 @@ func (r *ModelRouter) DetermineRoute(req *model.AnthropicRequest) (*RoutingDecis
 
 			// Check if this matches a known custom agent
 			if definition, exists := r.customAgentPrompts[promptHash]; exists {
-				r.logger.Printf("\033[36m%s\033[0m → \033[32m%s\033[0m",
-					req.Model, definition.TargetModel)
+				r.logger.Printf("\033[36m%s\033[0m → \033[33m%s\033[0m:\033[32m%s\033[0m",
+					req.Model, definition.TargetProvider, definition.TargetModel)
 
 				decision.TargetModel = definition.TargetModel
 				decision.Provider = r.providers[definition.TargetProvider]
+				decision.ProviderName = definition.TargetProvider
+				decision.SubagentName = definition.Name
 				if decision.Provider == nil {
 					return nil, fmt.Errorf("provider %s not found for model %s",
 						definition.TargetProvider, definition.TargetModel)
@@ -187,11 +218,12 @@ func (r *ModelRouter) DetermineRoute(req *model.AnthropicRequest) (*RoutingDecis
 		}
 	}
 
-	// Default: use the original model and its provider
-	providerName := r.getProviderNameForModel(decision.TargetModel)
+	// Default: use the original model and find a provider for it
+	providerName := r.getDefaultProviderForModel(decision.TargetModel)
 	decision.Provider = r.providers[providerName]
+	decision.ProviderName = providerName
 	if decision.Provider == nil {
-		return nil, fmt.Errorf("no provider found for model %s", decision.TargetModel)
+		return nil, fmt.Errorf("no provider found for model %s (tried '%s')", decision.TargetModel, providerName)
 	}
 
 	return decision, nil
@@ -205,22 +237,56 @@ func (r *ModelRouter) hashString(s string) string {
 	return shortHash
 }
 
-func (r *ModelRouter) getProviderNameForModel(model string) string {
+// getDefaultProviderForModel returns the default provider name for a model
+// when no explicit provider is specified. This is used for non-subagent requests.
+func (r *ModelRouter) getDefaultProviderForModel(model string) string {
 	modelLower := strings.ToLower(model)
 
-	// Anthropic models: claude-*
+	// Look for a provider with anthropic format for Claude models
 	if strings.HasPrefix(modelLower, "claude") {
-		return "anthropic"
+		// First try to find a provider named "anthropic"
+		if _, exists := r.providers["anthropic"]; exists {
+			return "anthropic"
+		}
+		// Otherwise, find the first provider with anthropic format
+		for name, cfg := range r.config.Providers {
+			if cfg.Format == "anthropic" {
+				return name
+			}
+		}
 	}
 
-	// OpenAI models: gpt-*, o1*, o3*
+	// Look for a provider with openai format for OpenAI models
 	if strings.HasPrefix(modelLower, "gpt") ||
 		strings.HasPrefix(modelLower, "o1") ||
 		strings.HasPrefix(modelLower, "o3") {
-		return "openai"
+		// First try to find a provider named "openai"
+		if _, exists := r.providers["openai"]; exists {
+			return "openai"
+		}
+		// Otherwise, find the first provider with openai format
+		for name, cfg := range r.config.Providers {
+			if cfg.Format == "openai" {
+				return name
+			}
+		}
 	}
 
-	// Default to anthropic for unknown models
-	r.logger.Printf("⚠️  Model '%s' doesn't match any known patterns, defaulting to anthropic", model)
-	return "anthropic"
+	// Default: try "anthropic" first, then first available provider with anthropic format
+	if _, exists := r.providers["anthropic"]; exists {
+		return "anthropic"
+	}
+	for name, cfg := range r.config.Providers {
+		if cfg.Format == "anthropic" {
+			return name
+		}
+	}
+
+	// Last resort: return the first provider
+	for name := range r.providers {
+		r.logger.Printf("⚠️  Model '%s' doesn't match any known patterns, using first available provider '%s'", model, name)
+		return name
+	}
+
+	return ""
 }

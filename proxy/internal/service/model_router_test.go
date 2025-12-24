@@ -1,7 +1,9 @@
 package service
 
 import (
+	"context"
 	"log"
+	"net/http"
 	"os"
 	"testing"
 
@@ -11,11 +13,22 @@ import (
 )
 
 func TestModelRouter_EdgeCases(t *testing.T) {
-	// Setup
+	// Setup with new provider format
 	cfg := &config.Config{
+		Providers: map[string]*config.ProviderConfig{
+			"anthropic": {
+				Format:  "anthropic",
+				BaseURL: "https://api.anthropic.com",
+			},
+			"openai": {
+				Format:  "openai",
+				BaseURL: "https://api.openai.com",
+			},
+		},
 		Subagents: config.SubagentsConfig{
 			Mappings: map[string]string{
-				"streaming-systems-engineer": "gpt-4o",
+				// New format: provider:model
+				"streaming-systems-engineer": "openai:gpt-4o",
 			},
 		},
 	}
@@ -130,8 +143,200 @@ func TestModelRouter_ExtractStaticPrompt(t *testing.T) {
 	}
 }
 
+func TestModelRouter_ParseMappings(t *testing.T) {
+	// Test that mappings are correctly parsed from provider:model format
+	cfg := &config.Config{
+		Providers: map[string]*config.ProviderConfig{
+			"anthropic": {
+				Format:  "anthropic",
+				BaseURL: "https://api.anthropic.com",
+			},
+			"openai": {
+				Format:  "openai",
+				BaseURL: "https://api.openai.com",
+			},
+			"localllm": {
+				Format:  "openai",
+				BaseURL: "http://localhost:1234",
+			},
+		},
+		Subagents: config.SubagentsConfig{
+			Enable: true,
+			Mappings: map[string]string{
+				"code-reviewer": "openai:gpt-4o",
+				"planner":       "localllm:my-local-model",
+				"invalid":       "just-a-model", // Invalid format - missing provider
+			},
+		},
+	}
+
+	providers := make(map[string]provider.Provider)
+	providers["anthropic"] = nil
+	providers["openai"] = nil
+	providers["localllm"] = nil
+
+	logger := log.New(os.Stdout, "test: ", log.LstdFlags)
+	router := NewModelRouter(cfg, providers, logger)
+
+	// Verify parsed mappings
+	if len(router.subagentMappings) != 2 {
+		t.Errorf("Expected 2 valid mappings, got %d", len(router.subagentMappings))
+	}
+
+	// Check code-reviewer mapping
+	if mapping, exists := router.subagentMappings["code-reviewer"]; exists {
+		if mapping.ProviderName != "openai" {
+			t.Errorf("Expected provider 'openai', got '%s'", mapping.ProviderName)
+		}
+		if mapping.ModelName != "gpt-4o" {
+			t.Errorf("Expected model 'gpt-4o', got '%s'", mapping.ModelName)
+		}
+	} else {
+		t.Error("code-reviewer mapping not found")
+	}
+
+	// Check planner mapping
+	if mapping, exists := router.subagentMappings["planner"]; exists {
+		if mapping.ProviderName != "localllm" {
+			t.Errorf("Expected provider 'localllm', got '%s'", mapping.ProviderName)
+		}
+		if mapping.ModelName != "my-local-model" {
+			t.Errorf("Expected model 'my-local-model', got '%s'", mapping.ModelName)
+		}
+	} else {
+		t.Error("planner mapping not found")
+	}
+
+	// Verify invalid mapping was skipped
+	if _, exists := router.subagentMappings["invalid"]; exists {
+		t.Error("Invalid mapping should have been skipped")
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
 		(len(s) > 0 && len(substr) > 0 && s[0:len(substr)] == substr) ||
 		(len(s) > len(substr) && contains(s[1:], substr)))
+}
+
+// TestRoutingDecision_ProviderNameAndSubagentName tests that ProviderName and SubagentName
+// are correctly populated in the RoutingDecision
+func TestRoutingDecision_ProviderNameAndSubagentName(t *testing.T) {
+	// Create a mock provider that implements the Provider interface
+	mockAnthropicProvider := &mockProvider{name: "anthropic"}
+	mockOpenAIProvider := &mockProvider{name: "openai"}
+
+	cfg := &config.Config{
+		Providers: map[string]*config.ProviderConfig{
+			"anthropic": {
+				Format:  "anthropic",
+				BaseURL: "https://api.anthropic.com",
+			},
+			"openai": {
+				Format:  "openai",
+				BaseURL: "https://api.openai.com",
+			},
+		},
+		Subagents: config.SubagentsConfig{
+			Enable: true,
+			Mappings: map[string]string{
+				"test-agent": "openai:gpt-4o",
+			},
+		},
+	}
+
+	providers := make(map[string]provider.Provider)
+	providers["anthropic"] = mockAnthropicProvider
+	providers["openai"] = mockOpenAIProvider
+
+	logger := log.New(os.Stdout, "test: ", log.LstdFlags)
+	router := NewModelRouter(cfg, providers, logger)
+
+	// Manually add a test agent prompt hash for testing
+	testPrompt := "You are a test agent for unit testing."
+	hash := router.hashString(testPrompt)
+	router.customAgentPrompts[hash] = SubagentDefinition{
+		Name:           "test-agent",
+		TargetModel:    "gpt-4o",
+		TargetProvider: "openai",
+		FullPrompt:     testPrompt,
+	}
+
+	tests := []struct {
+		name                 string
+		request              *model.AnthropicRequest
+		expectedProviderName string
+		expectedSubagentName string
+		expectedTargetModel  string
+	}{
+		{
+			name: "Default route populates ProviderName",
+			request: &model.AnthropicRequest{
+				Model: "claude-3-opus-20240229",
+				System: []model.AnthropicSystemMessage{
+					{Text: "You are a helpful assistant."},
+				},
+			},
+			expectedProviderName: "anthropic",
+			expectedSubagentName: "",
+			expectedTargetModel:  "claude-3-opus-20240229",
+		},
+		{
+			name: "Subagent route populates both ProviderName and SubagentName",
+			request: &model.AnthropicRequest{
+				Model: "claude-3-opus-20240229",
+				System: []model.AnthropicSystemMessage{
+					{Text: "You are Claude Code, Anthropic's official CLI for Claude."},
+					{Text: testPrompt},
+				},
+			},
+			expectedProviderName: "openai",
+			expectedSubagentName: "test-agent",
+			expectedTargetModel:  "gpt-4o",
+		},
+		{
+			name: "OpenAI model routes to OpenAI provider",
+			request: &model.AnthropicRequest{
+				Model:  "gpt-4o",
+				System: []model.AnthropicSystemMessage{},
+			},
+			expectedProviderName: "openai",
+			expectedSubagentName: "",
+			expectedTargetModel:  "gpt-4o",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision, err := router.DetermineRoute(tt.request)
+			if err != nil {
+				t.Fatalf("DetermineRoute() error = %v", err)
+			}
+
+			if decision.ProviderName != tt.expectedProviderName {
+				t.Errorf("ProviderName = %q, want %q", decision.ProviderName, tt.expectedProviderName)
+			}
+
+			if decision.SubagentName != tt.expectedSubagentName {
+				t.Errorf("SubagentName = %q, want %q", decision.SubagentName, tt.expectedSubagentName)
+			}
+
+			if decision.TargetModel != tt.expectedTargetModel {
+				t.Errorf("TargetModel = %q, want %q", decision.TargetModel, tt.expectedTargetModel)
+			}
+		})
+	}
+}
+
+// mockProvider implements provider.Provider for testing
+type mockProvider struct {
+	name string
+}
+
+func (m *mockProvider) Name() string {
+	return m.name
+}
+
+func (m *mockProvider) ForwardRequest(ctx context.Context, req *http.Request) (*http.Response, error) {
+	return nil, nil
 }
