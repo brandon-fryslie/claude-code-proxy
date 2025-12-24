@@ -1,0 +1,75 @@
+Agent: iterative-implementer | 20251224_023121
+Mode: manual
+Completed: API integration for all dashboard pages | Files: 11 | Commits: 1
+Cache invalidated: N/A (no eval cache present)
+Status: complete
+
+WORK COMPLETED:
+================
+
+1. Created TypeScript type definitions (src/lib/types.ts)
+   - Mapped all Go model types from proxy/internal/model/models.go
+   - Comprehensive types for requests, stats, conversations, and analytics
+
+2. Implemented API client with TanStack Query hooks (src/lib/api.ts)
+   - useRequestsSummary, useRequestDetail
+   - useHourlyStats, useWeeklyStats, useModelStats
+   - useProviderStats, useSubagentStats, useToolStats, usePerformanceStats
+   - useConversations, useConversationDetail
+   - Utility functions: getTodayDateRange, formatDuration, formatTokens
+
+3. Updated vite.config.ts
+   - Changed proxy target from port 3000 to 3001 (matches proxy server)
+
+4. Wired up Dashboard page (src/pages/Dashboard.tsx)
+   - Real-time stats: today's requests, tokens used, avg response time, active providers
+   - Recharts visualizations: hourly request volume bar chart, token usage by provider pie chart
+   - Proper loading states and empty state handling
+
+5. Wired up Requests page (src/pages/Requests.tsx)
+   - Request summaries list with virtualization-ready structure
+   - Lazy-loaded request details on click
+   - Search functionality
+   - Full request/response body display
+
+6. Wired up Performance page (src/pages/Performance.tsx)
+   - Performance metrics: avg, p50, p95, p99 response times
+   - Multi-series bar chart comparing percentiles by provider/model
+   - Detailed statistics table with TTFB data
+
+7. Wired up Routing page (src/pages/Routing.tsx)
+   - Subagent routing configuration display
+   - Routing statistics: total routed, total tokens, avg latency
+   - Detailed token usage breakdown by subagent
+
+8. Wired up Usage page (src/pages/Usage.tsx)
+   - Token usage summaries: today, this week, this month
+   - Token usage by model bar chart
+   - Weekly trend chart (last 7 days)
+   - Detailed breakdown table
+
+9. Wired up Conversations page (src/pages/Conversations.tsx)
+   - Conversation list with project names and metadata
+   - Conversation detail view showing message turns
+   - Proper master-detail layout
+
+VALIDATION:
+============
+
+Manual validation performed:
+- TypeScript compilation: PASSED (pnpm build successful)
+- Build output: 736.41 KB bundle (production ready)
+- No TypeScript errors
+- All pages compile without warnings
+
+NEXT STEPS:
+============
+
+To test the dashboard:
+1. Start the proxy server: cd proxy && go run cmd/proxy/main.go
+2. Start the dashboard: cd dashboard && pnpm dev
+3. Open http://localhost:5174
+4. Make some API requests through the proxy to populate data
+5. Verify all pages load and display real data correctly
+
+The dashboard is now fully wired up to the backend APIs and ready for testing with live data.
