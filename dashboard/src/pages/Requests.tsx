@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { PageHeader } from '@/components/layout'
 import { ResizablePanel, PanelGroup, Panel } from '@/components/layout'
+import { MessageContent, CopyButton } from '@/components/ui'
 import { cn } from '@/lib/utils'
 import { ChevronRight, Clock, ArrowRight, Filter, Search } from 'lucide-react'
 import { useRequestsSummary, useRequestDetail, formatDuration } from '@/lib/api'
@@ -69,6 +70,8 @@ function RequestListItem({
 
 function RequestDetail({ requestId }: { requestId: string | null }) {
   const { data: request, isLoading } = useRequestDetail(requestId)
+  const [showRawRequest, setShowRawRequest] = useState(false)
+  const [showRawResponse, setShowRawResponse] = useState(false)
 
   if (!requestId) {
     return (
@@ -151,18 +154,92 @@ function RequestDetail({ requestId }: { requestId: string | null }) {
       </div>
 
       <div className="space-y-4">
+        {/* Request Messages */}
         <div>
-          <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-2">Request</h3>
-          <div className="p-3 rounded bg-[var(--color-bg-tertiary)] font-mono text-xs text-[var(--color-text-secondary)] overflow-auto max-h-96">
-            <pre>{JSON.stringify(request.body, null, 2)}</pre>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-medium text-[var(--color-text-primary)]">Request Messages</h3>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowRawRequest(!showRawRequest)}
+                className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
+              >
+                {showRawRequest ? 'Show Formatted' : 'Show Raw JSON'}
+              </button>
+              <CopyButton
+                content={JSON.stringify(request.body, null, 2)}
+                size="sm"
+              />
+            </div>
           </div>
+          {showRawRequest ? (
+            <div className="p-3 rounded bg-[var(--color-bg-tertiary)] font-mono text-xs text-[var(--color-text-secondary)] overflow-auto max-h-96">
+              <pre>{JSON.stringify(request.body, null, 2)}</pre>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {request.body?.messages?.map((message, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    'p-4 rounded-lg border',
+                    message.role === 'user' && 'bg-blue-50 border-blue-200',
+                    message.role === 'assistant' && 'bg-purple-50 border-purple-200',
+                    message.role === 'system' && 'bg-gray-50 border-gray-200'
+                  )}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={cn(
+                      'text-xs font-medium px-2 py-1 rounded',
+                      message.role === 'user' && 'bg-blue-100 text-blue-700',
+                      message.role === 'assistant' && 'bg-purple-100 text-purple-700',
+                      message.role === 'system' && 'bg-gray-100 text-gray-700'
+                    )}>
+                      {message.role}
+                    </span>
+                  </div>
+                  <MessageContent content={message.content} showSystemReminders={false} />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
+
+        {/* Response */}
         {request.response && (
           <div>
-            <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-2">Response</h3>
-            <div className="p-3 rounded bg-[var(--color-bg-tertiary)] font-mono text-xs text-[var(--color-text-secondary)] overflow-auto max-h-96">
-              <pre>{JSON.stringify(request.response.body || request.response.bodyText, null, 2)}</pre>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium text-[var(--color-text-primary)]">Response</h3>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowRawResponse(!showRawResponse)}
+                  className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
+                >
+                  {showRawResponse ? 'Show Formatted' : 'Show Raw JSON'}
+                </button>
+                <CopyButton
+                  content={JSON.stringify(request.response.body || request.response.bodyText, null, 2)}
+                  size="sm"
+                />
+              </div>
             </div>
+            {showRawResponse ? (
+              <div className="p-3 rounded bg-[var(--color-bg-tertiary)] font-mono text-xs text-[var(--color-text-secondary)] overflow-auto max-h-96">
+                <pre>{JSON.stringify(request.response.body || request.response.bodyText, null, 2)}</pre>
+              </div>
+            ) : (
+              <div className="p-4 rounded-lg border bg-purple-50 border-purple-200">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium px-2 py-1 rounded bg-purple-100 text-purple-700">
+                    assistant
+                  </span>
+                </div>
+                {request.response.body?.content ? (
+                  <MessageContent content={request.response.body.content} showSystemReminders={false} />
+                ) : (
+                  <pre className="text-xs text-gray-600">{request.response.bodyText || 'No response content'}</pre>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
