@@ -3,6 +3,7 @@ import { PageHeader } from '@/components/layout'
 import { MessageSquare, Clock, Hash } from 'lucide-react'
 import { useConversations, useConversationDetail } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { ConversationThread } from '@/components/features/ConversationThread'
 
 function ConversationListItem({
   projectName,
@@ -83,58 +84,11 @@ function ConversationDetail({ conversationId }: { conversationId: string | null 
   }
 
   return (
-    <div className="p-4 h-full overflow-auto">
-      <div className="mb-4">
-        <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
-          {conversation.projectName || 'Conversation Details'}
-        </h2>
-        <p className="text-sm text-[var(--color-text-muted)] mt-1">
-          {conversation.messageCount} messages • Started{' '}
-          {new Date(conversation.startTime).toLocaleString()}
-        </p>
-      </div>
-
-      <div className="space-y-4">
-        {conversation.messages.map((message) => (
-          <div
-            key={message.requestId}
-            className="p-3 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-[var(--color-text-primary)]">
-                  Turn {message.turnNumber}
-                </span>
-                {message.isRoot && (
-                  <span className="px-1.5 py-0.5 text-xs rounded bg-blue-500/20 text-blue-400">
-                    Root
-                  </span>
-                )}
-              </div>
-              <span className="text-xs text-[var(--color-text-muted)]">
-                {new Date(message.timestamp).toLocaleTimeString()}
-              </span>
-            </div>
-            <div className="text-xs text-[var(--color-text-secondary)]">
-              <p>Request ID: {message.requestId}</p>
-              {message.request && (
-                <div className="mt-2">
-                  <p className="text-[var(--color-text-muted)]">
-                    Model: {message.request.model || 'N/A'}
-                  </p>
-                  {message.request.response && (
-                    <p className="text-[var(--color-text-muted)]">
-                      Response: {message.request.response.statusCode} •{' '}
-                      {message.request.response.responseTime}ms
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+    <ConversationThread
+      messages={conversation.messages}
+      startTime={conversation.startTime}
+      endTime={conversation.lastActivity}
+    />
   )
 }
 
