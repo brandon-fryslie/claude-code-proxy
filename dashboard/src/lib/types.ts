@@ -32,6 +32,15 @@ export interface AnthropicContentBlock {
   id?: string
   name?: string
   input?: any
+  tool_use_id?: string
+  content?: string | AnthropicContentBlock[]
+  is_error?: boolean
+  source?: {
+    type: string
+    media_type: string
+    data: string
+  }
+  [key: string]: any  // Index signature to allow any additional properties
 }
 
 export interface AnthropicMessage {
