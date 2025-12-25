@@ -1,7 +1,7 @@
 import { PageHeader, PageContent } from '@/components/layout'
 import { Zap } from 'lucide-react'
 import { usePerformanceStats, getTodayDateRange, formatDuration } from '@/lib/api'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { PerformanceChart } from '@/components/charts'
 
 export function PerformancePage() {
   const dateRange = getTodayDateRange()
@@ -35,15 +35,6 @@ export function PerformancePage() {
     ? Math.round(overallStats.p99ResponseMs / overallStats.requestCount)
     : 0
 
-  // Prepare chart data
-  const chartData = perfStats?.stats.map(stat => ({
-    name: `${stat.provider}:${stat.model}`,
-    avg: stat.avgResponseMs,
-    p50: stat.p50ResponseMs,
-    p95: stat.p95ResponseMs,
-    p99: stat.p99ResponseMs,
-  })) || []
-
   return (
     <>
       <PageHeader
@@ -51,6 +42,7 @@ export function PerformancePage() {
         description="Response times and latency analysis"
       />
       <PageContent>
+        {/* Stats Grid */}
         <div className="grid grid-cols-4 gap-4 mb-6">
           <div className="p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
             <p className="text-xs text-[var(--color-text-muted)] uppercase tracking-wide">Avg Response</p>
@@ -83,7 +75,7 @@ export function PerformancePage() {
         </div>
 
         {/* Performance Chart */}
-        <div className="p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
+        <div className="mb-6 p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
           <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-4">
             Response Times by Provider & Model
           </h3>
@@ -92,51 +84,20 @@ export function PerformancePage() {
               <Zap size={48} className="mb-4 opacity-50" />
               <p>Loading performance data...</p>
             </div>
-          ) : chartData.length === 0 ? (
+          ) : !perfStats?.stats || perfStats.stats.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-96 text-[var(--color-text-muted)]">
               <Zap size={48} className="mb-4 opacity-50" />
               <p>No performance data available</p>
               <p className="text-sm mt-1">Make some requests to see performance metrics</p>
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={400}>
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                <XAxis
-                  dataKey="name"
-                  stroke="var(--color-text-muted)"
-                  style={{ fontSize: '11px' }}
-                  angle={-45}
-                  textAnchor="end"
-                  height={100}
-                />
-                <YAxis
-                  stroke="var(--color-text-muted)"
-                  style={{ fontSize: '12px' }}
-                  label={{ value: 'Response Time (ms)', angle: -90, position: 'insideLeft' }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'var(--color-bg-tertiary)',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: '6px',
-                    color: 'var(--color-text-primary)',
-                  }}
-                  formatter={(value) => value ? `${value}ms` : "0ms"}
-                />
-                <Legend />
-                <Bar dataKey="avg" fill="#8b5cf6" name="Average" />
-                <Bar dataKey="p50" fill="#3b82f6" name="P50" />
-                <Bar dataKey="p95" fill="#f59e0b" name="P95" />
-                <Bar dataKey="p99" fill="#ef4444" name="P99" />
-              </BarChart>
-            </ResponsiveContainer>
+            <PerformanceChart data={perfStats.stats} height={400} />
           )}
         </div>
 
         {/* Detailed Stats Table */}
         {perfStats && perfStats.stats.length > 0 && (
-          <div className="mt-6 p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
+          <div className="p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
             <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-4">Detailed Statistics</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
