@@ -87,7 +87,7 @@ function ConversationDetail({ conversationId }: { conversationId: string | null 
     <ConversationThread
       messages={conversation.messages}
       startTime={conversation.startTime}
-      endTime={conversation.lastActivity}
+      endTime={conversation.endTime}
     />
   )
 }

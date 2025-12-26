@@ -241,6 +241,23 @@ export interface Conversation {
   rootRequestId?: string
 }
 
+// Claude Code log message format
+export interface ClaudeCodeMessage {
+  type: string  // 'user' | 'assistant' | 'file-history-snapshot' | 'queue-operation' | 'system'
+  message?: {
+    role?: string
+    content?: string | AnthropicContentBlock[]
+  } | null
+  uuid: string
+  timestamp: string
+  parentUuid?: string | null
+  isSidechain?: boolean
+  userType?: string
+  cwd?: string
+  sessionId?: string
+  version?: string
+}
+
 export interface ConversationMessage {
   requestId: string
   timestamp: string
@@ -249,6 +266,12 @@ export interface ConversationMessage {
   request?: RequestLog
 }
 
-export interface ConversationDetail extends Conversation {
-  messages: ConversationMessage[]
+export interface ConversationDetail {
+  sessionId: string
+  projectName: string
+  projectPath: string
+  startTime: string
+  endTime: string
+  messageCount: number
+  messages: ClaudeCodeMessage[]
 }
