@@ -2,13 +2,14 @@ import { useState } from 'react'
 import { PageHeader } from '@/components/layout'
 import { ResizablePanel, PanelGroup, Panel } from '@/components/layout'
 import { cn } from '@/lib/utils'
-import { ChevronRight, Clock, ArrowRight, Search, GitCompare } from 'lucide-react'
+import { ChevronRight, Clock, ArrowRight, Search, GitCompare, User, Bot } from 'lucide-react'
 import { useRequestsSummary, useRequestDetail, formatDuration, clearAllRequests } from '@/lib/api'
 import { useQueryClient } from '@tanstack/react-query'
 import type { RequestSummary as RequestSummaryType, RequestLog } from '@/lib/types'
 import { CompareModeBanner } from '@/components/features/CompareModeBanner'
 import { RequestCompareModal } from '@/components/features/RequestCompareModal'
 import { DataManagementBar } from '@/components/features/DataManagementBar'
+import { MessageContent } from '@/components/ui'
 
 interface CompareState {
   enabled: boolean
@@ -178,17 +179,52 @@ function RequestDetail({ requestId }: { requestId: string | null }) {
       </div>
 
       <div className="space-y-4">
+        {/* Request Messages */}
         <div>
-          <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-2">Request</h3>
-          <div className="p-3 rounded bg-[var(--color-bg-tertiary)] font-mono text-xs text-[var(--color-text-secondary)] overflow-auto max-h-96">
-            <pre>{JSON.stringify(request.body, null, 2)}</pre>
+          <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-2">Request Messages</h3>
+          <div className="space-y-3 max-h-[50vh] overflow-auto">
+            {request.body?.messages?.map((msg, idx) => (
+              <div
+                key={idx}
+                className={cn(
+                  'rounded-lg border p-3',
+                  msg.role === 'user' ? 'bg-blue-500/10 border-blue-500/30 ml-4' : 'bg-[var(--color-bg-tertiary)] border-[var(--color-border)] mr-4'
+                )}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  {msg.role === 'user' ? (
+                    <User size={14} className="text-blue-400" />
+                  ) : (
+                    <Bot size={14} className="text-green-400" />
+                  )}
+                  <span className="text-xs font-medium text-[var(--color-text-secondary)] uppercase">
+                    {msg.role}
+                  </span>
+                </div>
+                <MessageContent content={msg.content} />
+              </div>
+            )) || (
+              <div className="p-3 rounded bg-[var(--color-bg-tertiary)] font-mono text-xs text-[var(--color-text-secondary)] overflow-auto">
+                <pre>{JSON.stringify(request.body, null, 2)}</pre>
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Response Content */}
         {request.response && (
           <div>
             <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-2">Response</h3>
-            <div className="p-3 rounded bg-[var(--color-bg-tertiary)] font-mono text-xs text-[var(--color-text-secondary)] overflow-auto max-h-96">
-              <pre>{JSON.stringify(request.response.body || request.response.bodyText, null, 2)}</pre>
+            <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg-tertiary)] p-3 max-h-[50vh] overflow-auto">
+              {request.response.body?.content ? (
+                <MessageContent content={request.response.body.content} />
+              ) : request.response.bodyText ? (
+                <pre className="font-mono text-xs text-[var(--color-text-secondary)] whitespace-pre-wrap">
+                  {request.response.bodyText}
+                </pre>
+              ) : (
+                <div className="text-sm text-[var(--color-text-muted)] italic">No response content</div>
+              )}
             </div>
           </div>
         )}
@@ -207,6 +243,8 @@ export function RequestsPage() {
   const [showCompareModal, setShowCompareModal] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
+  const [compareRequests, setCompareRequests] = useState<{ request1: RequestLog; request2: RequestLog } | null>(null)
+  const [isLoadingCompare, setIsLoadingCompare] = useState(false)
 
   const queryClient = useQueryClient()
   const { data: requests, isLoading, refetch } = useRequestsSummary({ limit: 100 })
@@ -250,9 +288,48 @@ export function RequestsPage() {
     })
   }
 
-  const handleCompare = () => {
-    if (compareState.selectedIds.length === 2) {
-      setShowCompareModal(true)
+  const handleCompare = async () => {
+    if (compareState.selectedIds.length !== 2) return
+
+    setIsLoadingCompare(true)
+    try {
+      // Fetch both requests - first try cache, then fetch
+      const [id1, id2] = compareState.selectedIds
+
+      let request1 = queryClient.getQueryData<RequestLog>(['requests', 'detail', id1])
+      let request2 = queryClient.getQueryData<RequestLog>(['requests', 'detail', id2])
+
+      // Fetch if not in cache
+      if (!request1) {
+        request1 = await queryClient.fetchQuery({
+          queryKey: ['requests', 'detail', id1],
+          queryFn: async () => {
+            const response = await fetch(`/api/requests/${id1}`)
+            if (!response.ok) throw new Error('Failed to fetch request')
+            return response.json()
+          }
+        })
+      }
+
+      if (!request2) {
+        request2 = await queryClient.fetchQuery({
+          queryKey: ['requests', 'detail', id2],
+          queryFn: async () => {
+            const response = await fetch(`/api/requests/${id2}`)
+            if (!response.ok) throw new Error('Failed to fetch request')
+            return response.json()
+          }
+        })
+      }
+
+      if (request1 && request2) {
+        setCompareRequests({ request1, request2 })
+        setShowCompareModal(true)
+      }
+    } catch (error) {
+      console.error('Failed to fetch requests for comparison:', error)
+    } finally {
+      setIsLoadingCompare(false)
     }
   }
 
@@ -272,13 +349,10 @@ export function RequestsPage() {
     setSelectedRequestId(null)
   }
 
-  // Get full request logs for compare modal
-  const compareRequest1 = compareState.selectedIds[0]
-    ? queryClient.getQueryData<RequestLog>(['requests', 'detail', compareState.selectedIds[0]])
-    : null
-  const compareRequest2 = compareState.selectedIds[1]
-    ? queryClient.getQueryData<RequestLog>(['requests', 'detail', compareState.selectedIds[1]])
-    : null
+  const handleCloseCompareModal = () => {
+    setShowCompareModal(false)
+    setCompareRequests(null)
+  }
 
   return (
     <>
@@ -287,6 +361,7 @@ export function RequestsPage() {
           selectedCount={compareState.selectedIds.length}
           onCompare={handleCompare}
           onCancel={toggleCompareMode}
+          isLoading={isLoadingCompare}
         />
       )}
       <PageHeader
@@ -359,11 +434,11 @@ export function RequestsPage() {
       </div>
 
       {/* Compare Modal */}
-      {showCompareModal && compareRequest1 && compareRequest2 && (
+      {showCompareModal && compareRequests && (
         <RequestCompareModal
-          request1={compareRequest1}
-          request2={compareRequest2}
-          onClose={() => setShowCompareModal(false)}
+          request1={compareRequests.request1}
+          request2={compareRequests.request2}
+          onClose={handleCloseCompareModal}
         />
       )}
     </>

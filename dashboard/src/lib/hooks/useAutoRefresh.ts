@@ -8,7 +8,7 @@ interface UseAutoRefreshOptions {
 
 export function useAutoRefresh({ onRefresh, enabled }: UseAutoRefreshOptions) {
   const { settings } = useSettings()
-  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const isEnabled = enabled ?? settings.autoRefreshEnabled
   const intervalMs = settings.autoRefreshInterval * 1000

@@ -1,16 +1,18 @@
 import { type FC } from 'react'
-import { GitCompare, X } from 'lucide-react'
+import { GitCompare, X, Loader2 } from 'lucide-react'
 
 interface CompareModeBannerProps {
   selectedCount: number
   onCompare: () => void
   onCancel: () => void
+  isLoading?: boolean
 }
 
 export const CompareModeBanner: FC<CompareModeBannerProps> = ({
   selectedCount,
   onCompare,
   onCancel,
+  isLoading = false,
 }) => {
   return (
     <div className="sticky top-0 z-40 bg-indigo-600 text-white px-4 py-2 flex items-center justify-between shadow-lg">
@@ -25,10 +27,17 @@ export const CompareModeBanner: FC<CompareModeBannerProps> = ({
       <div className="flex items-center gap-2">
         <button
           onClick={onCompare}
-          disabled={selectedCount !== 2}
-          className="px-4 py-1.5 bg-white text-indigo-600 font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-indigo-50 transition-colors"
+          disabled={selectedCount !== 2 || isLoading}
+          className="px-4 py-1.5 bg-white text-indigo-600 font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-indigo-50 transition-colors flex items-center gap-2"
         >
-          Compare Selected
+          {isLoading ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading...
+            </>
+          ) : (
+            'Compare Selected'
+          )}
         </button>
         <button
           onClick={onCancel}
