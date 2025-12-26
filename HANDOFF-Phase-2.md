@@ -1,20 +1,19 @@
-# Phase 4: Charts & Analytics - Implementation Handoff
+# Phase 2: Rich Content Display - Implementation Handoff
 
-**Branch:** `phase-4-charts-analytics`
-**Epic:** `brandon-fryslie_claude-code-proxy-loz` (weekly-usage-chart), `brandon-fryslie_claude-code-proxy-xwb` (model-breakdown-stats), `brandon-fryslie_claude-code-proxy-eee` (performance-metrics)
+**Branch:** `phase-2-rich-content-display`
+**Epic:** `brandon-fryslie_claude-code-proxy-kqw` (message-content-parser), `brandon-fryslie_claude-code-proxy-6j7` (code-viewer), `brandon-fryslie_claude-code-proxy-nhw` (copy-to-clipboard)
 
 ---
 
 ## Executive Summary
 
-You are implementing the **Charts & Analytics** system for the new dashboard. Your work transforms raw token/request data into beautiful, interactive visualizations that help users understand their Claude API usage patterns.
+You are implementing the **Rich Content Display** system for the new dashboard. This is the foundation for all message rendering - without this, users see raw JSON instead of formatted content. Your work enables:
 
-**Prerequisites:** The new dashboard already has Recharts installed and basic charts in place. You're enhancing and expanding these visualizations.
+1. **Message Content Parser** - Transform Anthropic message blocks into React components
+2. **Code Viewer with Syntax Highlighting** - Display code with line numbers and language detection
+3. **Copy-to-Clipboard** - Universal copy buttons with visual feedback
 
-Your deliverables:
-1. **Weekly Usage Chart** - 7-day stacked bar chart with model breakdown
-2. **Model Breakdown Stats** - Per-model token/request analysis with pie/bar charts
-3. **Performance Metrics** - Response time percentiles, latency distribution
+When complete, users will see beautifully formatted messages instead of raw JSON blobs.
 
 ---
 
@@ -26,1582 +25,1225 @@ Your deliverables:
 ├── dashboard/              # NEW dashboard (your target)
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── layout/
-│   │   │   ├── ui/
-│   │   │   └── charts/     # CREATE THIS - your chart components
+│   │   │   ├── layout/     # Sidebar, AppLayout, ResizablePanel
+│   │   │   └── ui/         # EMPTY - you'll add components here
 │   │   ├── pages/
-│   │   │   ├── Dashboard.tsx   # Has basic charts (enhance)
-│   │   │   ├── Usage.tsx       # Token usage page (enhance)
-│   │   │   └── Performance.tsx # Performance page (enhance)
-│   │   └── lib/
-│   │       ├── types.ts    # TypeScript interfaces
-│   │       ├── api.ts      # React Query hooks (already has stats hooks)
-│   │       └── utils.ts
-├── web/                    # OLD dashboard (reference)
-│   └── app/components/
-│       └── UsageDashboard.tsx  # CRITICAL REFERENCE
-└── proxy/                  # Go backend
-    └── internal/
-        ├── handler/handlers.go  # Stats API handlers
-        └── model/models.go      # Data structures
+│   │   │   └── Requests.tsx  # Currently shows raw JSON
+│   │   ├── lib/
+│   │   │   ├── types.ts    # TypeScript interfaces
+│   │   │   ├── api.ts      # React Query hooks
+│   │   │   └── utils.ts    # cn() utility
+│   │   └── index.css       # Theme variables
+├── web/                    # OLD dashboard (reference implementation)
+│   └── app/
+│       ├── components/
+│       │   ├── MessageContent.tsx   # REFERENCE: Message rendering
+│       │   ├── CodeViewer.tsx       # REFERENCE: Code display
+│       │   ├── ToolUse.tsx          # REFERENCE: Tool rendering
+│       │   └── ToolResult.tsx       # REFERENCE: Result rendering
+│       └── utils/
+│           └── formatters.ts        # REFERENCE: Text utilities
+└── proxy/                  # Go backend (API reference)
 ```
 
-### Tech Stack
+### Tech Stack (Dashboard)
 - React 19.2.0
-- TypeScript 5.9.3
-- **Recharts 3.6.0** - Already installed, use this for all charts
+- TypeScript 5.9.3 (strict mode)
+- Vite 7.2.4
 - Tailwind CSS 4.1.18
 - TanStack React Query 5.90.12
+- Lucide React 0.562.0 (icons)
 
-### Existing Chart Infrastructure
-
-The dashboard already has these working:
-- `useWeeklyStats()` - Fetches 7-day aggregate data
-- `useHourlyStats()` - Fetches 24-hour breakdown
-- `useModelStats()` - Fetches per-model breakdown
-- `useProviderStats()` - Fetches per-provider breakdown
-- `usePerformanceStats()` - Fetches response time percentiles
-
----
-
-## API Endpoints You'll Use
-
-### GET /api/stats
-
-Returns weekly aggregate data.
-
-**Query Parameters:**
-- `start`: ISO 8601 UTC timestamp (week start)
-- `end`: ISO 8601 UTC timestamp (week end)
-
-**Response:**
-```typescript
-interface DashboardStats {
-  dailyStats: DailyTokens[];
-}
-
-interface DailyTokens {
-  date: string;           // "2024-12-24" (YYYY-MM-DD)
-  tokens: number;         // Total tokens (input + output)
-  requests: number;       // Request count
-  models: Record<string, ModelStats>;  // Per-model breakdown
-}
-
-interface ModelStats {
-  tokens: number;
-  requests: number;
-}
+### Running the Dashboard
+```bash
+cd dashboard
+pnpm install
+pnpm dev  # Starts on http://localhost:5174
 ```
 
-### GET /api/stats/hourly
-
-Returns hourly breakdown for a specific day.
-
-**Query Parameters:**
-- `start`: ISO 8601 UTC (day start)
-- `end`: ISO 8601 UTC (day end)
-
-**Response:**
-```typescript
-interface HourlyStatsResponse {
-  hourlyStats: HourlyTokens[];
-  todayTokens: number;      // Day total
-  todayRequests: number;
-  avgResponseTime: number;  // ms
-}
-
-interface HourlyTokens {
-  hour: number;           // 0-23 (UTC)
-  tokens: number;
-  requests: number;
-  models: Record<string, ModelStats>;
-}
-```
-
-### GET /api/stats/models
-
-Returns per-model breakdown for date range.
-
-**Response:**
-```typescript
-interface ModelStatsResponse {
-  modelStats: {
-    model: string;
-    tokens: number;
-    requests: number;
-  }[];
-}
-```
-
-### GET /api/stats/performance
-
-Returns response time percentiles.
-
-**Response:**
-```typescript
-interface PerformanceStatsResponse {
-  stats: PerformanceStats[];
-  startTime: string;
-  endTime: string;
-}
-
-interface PerformanceStats {
-  provider: string;
-  model: string;
-  avgResponseMs: number;
-  p50ResponseMs: number;  // Median
-  p95ResponseMs: number;  // 95th percentile
-  p99ResponseMs: number;  // 99th percentile
-  avgFirstByteMs: number; // Time to first token (streaming)
-  requestCount: number;
-}
+The backend proxy must be running on port 3001:
+```bash
+cd proxy && go run cmd/proxy/main.go
 ```
 
 ---
 
-## Topic 1: Weekly Usage Chart
+## Topic 1: Message Content Parser
 
 ### What You're Building
 
-A 7-day stacked bar chart showing token usage by model, similar to the old dashboard but with Recharts.
+A component system that transforms Anthropic API message content into React components. Messages can contain:
 
-### Key Features
-1. Sunday-Saturday week boundaries
-2. Stacked bars colored by model (Opus=purple, Sonnet=blue, Haiku=green)
-3. Day name labels (Sun, Mon, Tue, etc.)
-4. Hover tooltips with model breakdown
-5. Y-axis with smart token formatting (K, M, B)
-6. Average line (dashed)
-7. Highlight "today" if visible
-8. Click-to-select day functionality
+1. **Text content** - Plain text or markdown-like formatting
+2. **Tool use blocks** - Claude invoking tools with parameters
+3. **Tool result blocks** - Results returned from tool execution
+4. **Image content** - Base64 encoded images
+5. **Special XML tags** - `<system-reminder>`, `<functions>` blocks
 
-### WeeklyUsageChart.tsx
+### Anthropic Message Format
 
-```tsx
-// dashboard/src/components/charts/WeeklyUsageChart.tsx
-import { type FC, useMemo } from 'react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  ReferenceLine,
-  Cell,
-} from 'recharts';
-import { formatTokens, getModelColor, getModelDisplayName } from '@/lib/chartUtils';
+Messages come from the API in this structure:
 
-interface DailyTokens {
-  date: string;
-  tokens: number;
-  requests: number;
-  models: Record<string, { tokens: number; requests: number }>;
+```typescript
+// From dashboard/src/lib/types.ts
+interface AnthropicMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string | ContentBlock[];
 }
 
-interface WeeklyUsageChartProps {
-  data: DailyTokens[];
-  selectedDate?: string;          // Currently selected date (YYYY-MM-DD)
-  onDateSelect?: (date: string) => void;
-  height?: number;
+// Content can be a string OR an array of blocks:
+type ContentBlock =
+  | TextBlock
+  | ToolUseBlock
+  | ToolResultBlock
+  | ImageBlock;
+
+interface TextBlock {
+  type: 'text';
+  text: string;
 }
 
-// Day names in order (Sunday first)
-const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+interface ToolUseBlock {
+  type: 'tool_use';
+  id: string;          // e.g., "toolu_01XYZ..."
+  name: string;        // e.g., "bash", "file_editor", "read_file"
+  input: Record<string, unknown>;  // Tool-specific parameters
+}
 
-// Model colors - consistent across all charts
-export const MODEL_COLORS: Record<string, string> = {
-  // Opus variants (purple)
-  'claude-3-opus-20240229': '#9333ea',
-  'claude-opus-4-20250514': '#9333ea',
-  opus: '#9333ea',
+interface ToolResultBlock {
+  type: 'tool_result';
+  tool_use_id: string;  // References the tool_use block
+  content: string | ContentBlock[];
+  is_error?: boolean;
+}
 
-  // Sonnet variants (blue)
-  'claude-3-sonnet-20240229': '#3b82f6',
-  'claude-3-5-sonnet-20240620': '#3b82f6',
-  'claude-3-5-sonnet-20241022': '#3b82f6',
-  'claude-sonnet-4-20250514': '#3b82f6',
-  sonnet: '#3b82f6',
-
-  // Haiku variants (green)
-  'claude-3-haiku-20240307': '#10b981',
-  'claude-3-5-haiku-20241022': '#10b981',
-  haiku: '#10b981',
-
-  // OpenAI (orange)
-  'gpt-4': '#f97316',
-  'gpt-4o': '#f97316',
-  'gpt-4-turbo': '#f97316',
-
-  // Default (gray)
-  default: '#6b7280',
-};
-
-export const WeeklyUsageChart: FC<WeeklyUsageChartProps> = ({
-  data,
-  selectedDate,
-  onDateSelect,
-  height = 300,
-}) => {
-  // Get all unique models across all days
-  const allModels = useMemo(() => {
-    const modelSet = new Set<string>();
-    data.forEach(day => {
-      Object.keys(day.models).forEach(model => modelSet.add(model));
-    });
-    return Array.from(modelSet).sort();
-  }, [data]);
-
-  // Transform data for Recharts (needs flat structure with model keys)
-  const chartData = useMemo(() => {
-    return data.map(day => {
-      const date = new Date(day.date + 'T00:00:00');
-      const dayName = DAY_NAMES[date.getDay()];
-      const isToday = day.date === getTodayDateString();
-      const isSelected = day.date === selectedDate;
-
-      const result: Record<string, unknown> = {
-        date: day.date,
-        dayName,
-        totalTokens: day.tokens,
-        totalRequests: day.requests,
-        isToday,
-        isSelected,
-      };
-
-      // Add each model's tokens as a separate key
-      allModels.forEach(model => {
-        result[model] = day.models[model]?.tokens || 0;
-      });
-
-      return result;
-    });
-  }, [data, allModels, selectedDate]);
-
-  // Calculate average for reference line
-  const averageTokens = useMemo(() => {
-    const total = data.reduce((sum, day) => sum + day.tokens, 0);
-    return total / data.length;
-  }, [data]);
-
-  // Calculate max for Y-axis
-  const maxTokens = useMemo(() => {
-    return Math.max(...data.map(d => d.tokens), 1);
-  }, [data]);
-
-  // Custom tooltip
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (!active || !payload?.length) return null;
-
-    const dayData = chartData.find(d => d.dayName === label);
-    if (!dayData) return null;
-
-    return (
-      <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
-        <div className="font-semibold text-gray-900 mb-2">
-          {label} - {dayData.date}
-        </div>
-        <div className="space-y-1">
-          {payload
-            .filter((p: any) => p.value > 0)
-            .sort((a: any, b: any) => b.value - a.value)
-            .map((p: any) => (
-              <div key={p.dataKey} className="flex items-center gap-2">
-                <div
-                  className="w-3 h-3 rounded"
-                  style={{ backgroundColor: p.fill }}
-                />
-                <span className="text-gray-600">{getModelDisplayName(p.dataKey)}:</span>
-                <span className="font-medium">{formatTokens(p.value)}</span>
-              </div>
-            ))}
-        </div>
-        <div className="mt-2 pt-2 border-t border-gray-100">
-          <div className="flex justify-between">
-            <span className="text-gray-500">Total:</span>
-            <span className="font-semibold">{formatTokens(dayData.totalTokens as number)}</span>
-          </div>
-          <div className="flex justify-between text-gray-400">
-            <span>Requests:</span>
-            <span>{dayData.totalRequests}</span>
-          </div>
-        </div>
-      </div>
-    );
+interface ImageBlock {
+  type: 'image';
+  source: {
+    type: 'base64';
+    media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+    data: string;  // Base64 encoded
   };
-
-  // Handle bar click
-  const handleBarClick = (data: any) => {
-    if (onDateSelect && data?.date) {
-      onDateSelect(data.date);
-    }
-  };
-
-  return (
-    <ResponsiveContainer width="100%" height={height}>
-      <BarChart
-        data={chartData}
-        margin={{ top: 20, right: 20, left: 20, bottom: 20 }}
-        onClick={(e) => e?.activePayload?.[0] && handleBarClick(e.activePayload[0].payload)}
-      >
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-
-        <XAxis
-          dataKey="dayName"
-          tick={{ fill: '#6b7280', fontSize: 12 }}
-          tickLine={false}
-          axisLine={{ stroke: '#e5e7eb' }}
-        />
-
-        <YAxis
-          tickFormatter={formatTokens}
-          tick={{ fill: '#6b7280', fontSize: 12 }}
-          tickLine={false}
-          axisLine={false}
-          domain={[0, maxTokens * 1.1]}
-        />
-
-        <Tooltip content={<CustomTooltip />} />
-
-        {/* Average line */}
-        <ReferenceLine
-          y={averageTokens}
-          stroke="#9ca3af"
-          strokeDasharray="5 5"
-          label={{
-            value: `Avg: ${formatTokens(averageTokens)}`,
-            position: 'right',
-            fill: '#9ca3af',
-            fontSize: 11,
-          }}
-        />
-
-        {/* Stacked bars for each model */}
-        {allModels.map((model, index) => (
-          <Bar
-            key={model}
-            dataKey={model}
-            stackId="tokens"
-            fill={getModelColor(model)}
-            radius={index === allModels.length - 1 ? [4, 4, 0, 0] : undefined}
-            cursor="pointer"
-          >
-            {/* Highlight selected/today bars */}
-            {chartData.map((entry, i) => (
-              <Cell
-                key={i}
-                opacity={entry.isSelected ? 1 : entry.isToday ? 0.9 : 0.8}
-                strokeWidth={entry.isSelected ? 2 : 0}
-                stroke={entry.isSelected ? '#1f2937' : undefined}
-              />
-            ))}
-          </Bar>
-        ))}
-
-        <Legend
-          formatter={(value) => getModelDisplayName(value)}
-          wrapperStyle={{ paddingTop: 10 }}
-        />
-      </BarChart>
-    </ResponsiveContainer>
-  );
-};
-
-// Utility functions
-function getTodayDateString(): string {
-  return new Date().toISOString().split('T')[0];
-}
-
-export function getModelColor(model: string): string {
-  // Check exact match first
-  if (MODEL_COLORS[model]) return MODEL_COLORS[model];
-
-  // Check for partial matches
-  const lowerModel = model.toLowerCase();
-  if (lowerModel.includes('opus')) return MODEL_COLORS.opus;
-  if (lowerModel.includes('sonnet')) return MODEL_COLORS.sonnet;
-  if (lowerModel.includes('haiku')) return MODEL_COLORS.haiku;
-  if (lowerModel.includes('gpt')) return MODEL_COLORS['gpt-4'];
-
-  return MODEL_COLORS.default;
-}
-
-export function getModelDisplayName(model: string): string {
-  // Simplify long model names
-  if (model.includes('opus')) return 'Opus';
-  if (model.includes('sonnet')) return 'Sonnet';
-  if (model.includes('haiku')) return 'Haiku';
-  if (model.includes('gpt-4o')) return 'GPT-4o';
-  if (model.includes('gpt-4')) return 'GPT-4';
-
-  // Fallback: extract the key part
-  const parts = model.split('-');
-  if (parts.length > 2) {
-    return parts.slice(0, 2).join('-');
-  }
-  return model;
-}
-
-export function formatTokens(value: number): string {
-  if (value >= 1_000_000_000) {
-    return `${(value / 1_000_000_000).toFixed(1)}B`;
-  }
-  if (value >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(1)}M`;
-  }
-  if (value >= 1_000) {
-    return `${(value / 1_000).toFixed(1)}K`;
-  }
-  return value.toFixed(0);
 }
 ```
 
-### HourlyUsageChart.tsx
+### Component Architecture
 
-```tsx
-// dashboard/src/components/charts/HourlyUsageChart.tsx
-import { type FC, useMemo } from 'react';
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-} from 'recharts';
-import { formatTokens, getModelColor, getModelDisplayName } from './WeeklyUsageChart';
+Create these files in `dashboard/src/components/ui/`:
 
-interface HourlyTokens {
-  hour: number;
-  tokens: number;
-  requests: number;
-  models: Record<string, { tokens: number; requests: number }>;
-}
-
-interface HourlyUsageChartProps {
-  data: HourlyTokens[];
-  isToday?: boolean;
-  height?: number;
-}
-
-// Hour labels
-const HOUR_LABELS: Record<number, string> = {
-  0: '12 AM',
-  6: '6 AM',
-  12: '12 PM',
-  18: '6 PM',
-};
-
-export const HourlyUsageChart: FC<HourlyUsageChartProps> = ({
-  data,
-  isToday = false,
-  height = 250,
-}) => {
-  // Get all unique models
-  const allModels = useMemo(() => {
-    const modelSet = new Set<string>();
-    data.forEach(hour => {
-      Object.keys(hour.models).forEach(model => modelSet.add(model));
-    });
-    return Array.from(modelSet).sort();
-  }, [data]);
-
-  // Transform data - fill in missing hours
-  const chartData = useMemo(() => {
-    const fullDay = [];
-    for (let h = 0; h < 24; h++) {
-      const hourData = data.find(d => d.hour === h);
-      const result: Record<string, unknown> = {
-        hour: h,
-        hourLabel: HOUR_LABELS[h] || '',
-        totalTokens: hourData?.tokens || 0,
-        totalRequests: hourData?.requests || 0,
-      };
-
-      allModels.forEach(model => {
-        result[model] = hourData?.models[model]?.tokens || 0;
-      });
-
-      fullDay.push(result);
-    }
-    return fullDay;
-  }, [data, allModels]);
-
-  // Current hour for "now" indicator
-  const currentHour = new Date().getHours();
-
-  // Custom tooltip
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (!active || !payload?.length) return null;
-
-    const hourData = chartData.find(d => d.hour === label);
-    if (!hourData) return null;
-
-    const hourStr = formatHour(label);
-
-    return (
-      <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
-        <div className="font-semibold text-gray-900 mb-2">{hourStr}</div>
-        <div className="space-y-1">
-          {payload
-            .filter((p: any) => p.value > 0)
-            .map((p: any) => (
-              <div key={p.dataKey} className="flex items-center gap-2">
-                <div
-                  className="w-3 h-3 rounded"
-                  style={{ backgroundColor: p.fill }}
-                />
-                <span className="text-gray-600">{getModelDisplayName(p.dataKey)}:</span>
-                <span className="font-medium">{formatTokens(p.value)}</span>
-              </div>
-            ))}
-        </div>
-        <div className="mt-2 pt-2 border-t border-gray-100 text-gray-500">
-          {hourData.totalRequests} requests
-        </div>
-      </div>
-    );
-  };
-
-  return (
-    <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
-        <defs>
-          {allModels.map(model => (
-            <linearGradient key={model} id={`gradient-${model}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={getModelColor(model)} stopOpacity={0.8} />
-              <stop offset="95%" stopColor={getModelColor(model)} stopOpacity={0.1} />
-            </linearGradient>
-          ))}
-        </defs>
-
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-
-        <XAxis
-          dataKey="hour"
-          tick={{ fill: '#6b7280', fontSize: 11 }}
-          tickFormatter={(h) => HOUR_LABELS[h] || ''}
-          ticks={[0, 6, 12, 18]}
-          tickLine={false}
-          axisLine={{ stroke: '#e5e7eb' }}
-        />
-
-        <YAxis
-          tickFormatter={formatTokens}
-          tick={{ fill: '#6b7280', fontSize: 11 }}
-          tickLine={false}
-          axisLine={false}
-          width={50}
-        />
-
-        <Tooltip content={<CustomTooltip />} />
-
-        {/* Current time indicator (only if viewing today) */}
-        {isToday && (
-          <ReferenceLine
-            x={currentHour}
-            stroke="#ef4444"
-            strokeWidth={2}
-            label={{
-              value: 'Now',
-              position: 'top',
-              fill: '#ef4444',
-              fontSize: 11,
-            }}
-          />
-        )}
-
-        {/* Stacked areas for each model */}
-        {allModels.map(model => (
-          <Area
-            key={model}
-            type="monotone"
-            dataKey={model}
-            stackId="tokens"
-            stroke={getModelColor(model)}
-            fill={`url(#gradient-${model})`}
-            strokeWidth={2}
-          />
-        ))}
-      </AreaChart>
-    </ResponsiveContainer>
-  );
-};
-
-function formatHour(hour: number): string {
-  if (hour === 0) return '12:00 AM';
-  if (hour === 12) return '12:00 PM';
-  if (hour < 12) return `${hour}:00 AM`;
-  return `${hour - 12}:00 PM`;
-}
+```
+components/ui/
+├── MessageContent.tsx      # Main entry point - routes to sub-components
+├── TextContent.tsx         # Renders text with formatting
+├── ToolUseContent.tsx      # Renders tool invocations
+├── ToolResultContent.tsx   # Renders tool results
+├── ImageContent.tsx        # Renders base64 images
+├── SystemReminder.tsx      # Handles <system-reminder> tags
+├── FunctionDefinitions.tsx # Handles <functions> blocks
+└── index.ts                # Barrel exports
 ```
 
----
-
-## Topic 2: Model Breakdown Stats
-
-### ModelBreakdownChart.tsx
+### MessageContent.tsx - Main Component
 
 ```tsx
-// dashboard/src/components/charts/ModelBreakdownChart.tsx
-import { type FC, useMemo } from 'react';
-import {
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  Legend,
-} from 'recharts';
-import { formatTokens, getModelColor, getModelDisplayName } from './WeeklyUsageChart';
+// dashboard/src/components/ui/MessageContent.tsx
+import { type FC } from 'react';
+import { TextContent } from './TextContent';
+import { ToolUseContent } from './ToolUseContent';
+import { ToolResultContent } from './ToolResultContent';
+import { ImageContent } from './ImageContent';
 
-interface ModelStat {
-  model: string;
-  tokens: number;
-  requests: number;
+interface ContentBlock {
+  type: string;
+  [key: string]: unknown;
 }
 
-interface ModelBreakdownChartProps {
-  data: ModelStat[];
-  metric?: 'tokens' | 'requests';
-  height?: number;
+interface MessageContentProps {
+  content: string | ContentBlock[];
+  showSystemReminders?: boolean;  // Default: false (hide them)
 }
 
-export const ModelBreakdownChart: FC<ModelBreakdownChartProps> = ({
-  data,
-  metric = 'tokens',
-  height = 300,
+export const MessageContent: FC<MessageContentProps> = ({
+  content,
+  showSystemReminders = false
 }) => {
-  // Sort by the selected metric (descending)
-  const sortedData = useMemo(() => {
-    return [...data]
-      .sort((a, b) => b[metric] - a[metric])
-      .map(item => ({
-        ...item,
-        displayName: getModelDisplayName(item.model),
-        color: getModelColor(item.model),
-        value: item[metric],
-      }));
-  }, [data, metric]);
+  // Handle string content (simple case)
+  if (typeof content === 'string') {
+    return <TextContent text={content} showSystemReminders={showSystemReminders} />;
+  }
 
-  // Calculate total
-  const total = useMemo(() => {
-    return sortedData.reduce((sum, item) => sum + item.value, 0);
-  }, [sortedData]);
-
-  // Custom tooltip
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (!active || !payload?.length) return null;
-    const item = payload[0].payload;
-    const percentage = ((item.value / total) * 100).toFixed(1);
-
-    return (
-      <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
-        <div className="flex items-center gap-2 mb-1">
-          <div
-            className="w-3 h-3 rounded"
-            style={{ backgroundColor: item.color }}
-          />
-          <span className="font-semibold">{item.displayName}</span>
-        </div>
-        <div className="text-gray-600">
-          {metric === 'tokens' ? formatTokens(item.value) : item.value.toLocaleString()} {metric}
-        </div>
-        <div className="text-gray-400">{percentage}% of total</div>
-      </div>
-    );
-  };
-
-  // Custom legend with percentages
-  const renderLegend = (props: any) => {
-    const { payload } = props;
-    return (
-      <div className="flex flex-wrap justify-center gap-4 mt-4">
-        {payload.map((entry: any, index: number) => {
-          const item = sortedData[index];
-          const percentage = ((item.value / total) * 100).toFixed(1);
-          return (
-            <div key={entry.value} className="flex items-center gap-2 text-sm">
-              <div
-                className="w-3 h-3 rounded"
-                style={{ backgroundColor: entry.color }}
-              />
-              <span className="text-gray-600">{item.displayName}</span>
-              <span className="text-gray-400">({percentage}%)</span>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
-  if (sortedData.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64 text-gray-400">
-        No data available
-      </div>
-    );
+  // Handle array of content blocks
+  if (!Array.isArray(content)) {
+    return <pre className="text-xs text-red-500">Unknown content format</pre>;
   }
 
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <PieChart>
-        <Pie
-          data={sortedData}
-          cx="50%"
-          cy="50%"
-          innerRadius={60}
-          outerRadius={100}
-          paddingAngle={2}
-          dataKey="value"
-          nameKey="displayName"
-        >
-          {sortedData.map((entry, index) => (
-            <Cell key={index} fill={entry.color} />
-          ))}
-        </Pie>
-        <Tooltip content={<CustomTooltip />} />
-        <Legend content={renderLegend} />
-
-        {/* Center text showing total */}
-        <text
-          x="50%"
-          y="50%"
-          textAnchor="middle"
-          dominantBaseline="middle"
-          className="fill-gray-900 text-lg font-semibold"
-        >
-          {metric === 'tokens' ? formatTokens(total) : total.toLocaleString()}
-        </text>
-        <text
-          x="50%"
-          y="50%"
-          dy={20}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          className="fill-gray-400 text-xs"
-        >
-          total {metric}
-        </text>
-      </PieChart>
-    </ResponsiveContainer>
-  );
-};
-```
-
-### ModelComparisonBar.tsx
-
-Horizontal bar chart for comparing models side-by-side.
-
-```tsx
-// dashboard/src/components/charts/ModelComparisonBar.tsx
-import { type FC, useMemo } from 'react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-} from 'recharts';
-import { formatTokens, getModelColor, getModelDisplayName } from './WeeklyUsageChart';
-
-interface ModelStat {
-  model: string;
-  tokens: number;
-  requests: number;
-}
-
-interface ModelComparisonBarProps {
-  data: ModelStat[];
-  height?: number;
-}
-
-export const ModelComparisonBar: FC<ModelComparisonBarProps> = ({
-  data,
-  height = 250,
-}) => {
-  // Sort and enhance data
-  const chartData = useMemo(() => {
-    return [...data]
-      .sort((a, b) => b.tokens - a.tokens)
-      .map(item => ({
-        ...item,
-        displayName: getModelDisplayName(item.model),
-        color: getModelColor(item.model),
-        avgPerRequest: item.requests > 0 ? Math.round(item.tokens / item.requests) : 0,
-      }));
-  }, [data]);
-
-  // Custom tooltip
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (!active || !payload?.length) return null;
-    const item = payload[0].payload;
-
-    return (
-      <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
-        <div className="font-semibold text-gray-900 mb-2">{item.displayName}</div>
-        <div className="space-y-1">
-          <div className="flex justify-between gap-4">
-            <span className="text-gray-500">Tokens:</span>
-            <span className="font-medium">{formatTokens(item.tokens)}</span>
-          </div>
-          <div className="flex justify-between gap-4">
-            <span className="text-gray-500">Requests:</span>
-            <span className="font-medium">{item.requests.toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between gap-4">
-            <span className="text-gray-500">Avg/Request:</span>
-            <span className="font-medium">{formatTokens(item.avgPerRequest)}</span>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  return (
-    <ResponsiveContainer width="100%" height={height}>
-      <BarChart
-        data={chartData}
-        layout="vertical"
-        margin={{ top: 10, right: 30, left: 80, bottom: 10 }}
-      >
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
-
-        <XAxis
-          type="number"
-          tickFormatter={formatTokens}
-          tick={{ fill: '#6b7280', fontSize: 11 }}
-          tickLine={false}
-          axisLine={{ stroke: '#e5e7eb' }}
+    <div className="space-y-3">
+      {content.map((block, index) => (
+        <ContentBlockRenderer
+          key={`${block.type}-${index}`}
+          block={block}
+          showSystemReminders={showSystemReminders}
         />
-
-        <YAxis
-          type="category"
-          dataKey="displayName"
-          tick={{ fill: '#374151', fontSize: 12 }}
-          tickLine={false}
-          axisLine={false}
-          width={70}
-        />
-
-        <Tooltip content={<CustomTooltip />} />
-
-        <Bar dataKey="tokens" radius={[0, 4, 4, 0]}>
-          {chartData.map((entry, index) => (
-            <Cell key={index} fill={entry.color} />
-          ))}
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
-  );
-};
-```
-
----
-
-## Topic 3: Performance Metrics
-
-### PerformanceChart.tsx
-
-Multi-bar chart showing response time percentiles by model.
-
-```tsx
-// dashboard/src/components/charts/PerformanceChart.tsx
-import { type FC, useMemo } from 'react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts';
-import { getModelDisplayName } from './WeeklyUsageChart';
-
-interface PerformanceStats {
-  provider: string;
-  model: string;
-  avgResponseMs: number;
-  p50ResponseMs: number;
-  p95ResponseMs: number;
-  p99ResponseMs: number;
-  avgFirstByteMs: number;
-  requestCount: number;
-}
-
-interface PerformanceChartProps {
-  data: PerformanceStats[];
-  height?: number;
-}
-
-// Percentile colors
-const PERCENTILE_COLORS = {
-  p50: '#10b981',  // Green - median
-  p95: '#f59e0b',  // Amber - 95th
-  p99: '#ef4444',  // Red - 99th
-};
-
-export const PerformanceChart: FC<PerformanceChartProps> = ({
-  data,
-  height = 300,
-}) => {
-  // Transform data for display
-  const chartData = useMemo(() => {
-    return data
-      .filter(d => d.requestCount > 0)
-      .sort((a, b) => a.p50ResponseMs - b.p50ResponseMs)
-      .map(item => ({
-        ...item,
-        displayName: getModelDisplayName(item.model),
-        // Format for display
-        p50: item.p50ResponseMs,
-        p95: item.p95ResponseMs,
-        p99: item.p99ResponseMs,
-      }));
-  }, [data]);
-
-  // Custom tooltip
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (!active || !payload?.length) return null;
-
-    const item = chartData.find(d => d.displayName === label);
-    if (!item) return null;
-
-    return (
-      <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
-        <div className="font-semibold text-gray-900 mb-2">{label}</div>
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded" style={{ backgroundColor: PERCENTILE_COLORS.p50 }} />
-            <span className="text-gray-600">P50 (Median):</span>
-            <span className="font-medium">{formatDuration(item.p50ResponseMs)}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded" style={{ backgroundColor: PERCENTILE_COLORS.p95 }} />
-            <span className="text-gray-600">P95:</span>
-            <span className="font-medium">{formatDuration(item.p95ResponseMs)}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded" style={{ backgroundColor: PERCENTILE_COLORS.p99 }} />
-            <span className="text-gray-600">P99:</span>
-            <span className="font-medium">{formatDuration(item.p99ResponseMs)}</span>
-          </div>
-        </div>
-        <div className="mt-2 pt-2 border-t border-gray-100 text-gray-400">
-          <div>Avg: {formatDuration(item.avgResponseMs)}</div>
-          <div>TTFB: {formatDuration(item.avgFirstByteMs)}</div>
-          <div>{item.requestCount.toLocaleString()} requests</div>
-        </div>
-      </div>
-    );
-  };
-
-  if (chartData.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64 text-gray-400">
-        No performance data available
-      </div>
-    );
-  }
-
-  return (
-    <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-
-        <XAxis
-          dataKey="displayName"
-          tick={{ fill: '#374151', fontSize: 12 }}
-          tickLine={false}
-          axisLine={{ stroke: '#e5e7eb' }}
-        />
-
-        <YAxis
-          tickFormatter={formatDuration}
-          tick={{ fill: '#6b7280', fontSize: 11 }}
-          tickLine={false}
-          axisLine={false}
-        />
-
-        <Tooltip content={<CustomTooltip />} />
-
-        <Legend
-          formatter={(value) => {
-            const labels: Record<string, string> = {
-              p50: 'P50 (Median)',
-              p95: 'P95',
-              p99: 'P99',
-            };
-            return labels[value] || value;
-          }}
-        />
-
-        <Bar dataKey="p50" fill={PERCENTILE_COLORS.p50} name="p50" radius={[4, 4, 0, 0]} />
-        <Bar dataKey="p95" fill={PERCENTILE_COLORS.p95} name="p95" radius={[4, 4, 0, 0]} />
-        <Bar dataKey="p99" fill={PERCENTILE_COLORS.p99} name="p99" radius={[4, 4, 0, 0]} />
-      </BarChart>
-    </ResponsiveContainer>
-  );
-};
-
-// Format milliseconds to human-readable
-function formatDuration(ms: number): string {
-  if (ms < 1000) {
-    return `${Math.round(ms)}ms`;
-  }
-  if (ms < 60000) {
-    return `${(ms / 1000).toFixed(1)}s`;
-  }
-  return `${(ms / 60000).toFixed(1)}m`;
-}
-```
-
-### LatencyDistributionChart.tsx
-
-Histogram showing response time distribution.
-
-```tsx
-// dashboard/src/components/charts/LatencyDistributionChart.tsx
-import { type FC, useMemo } from 'react';
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-} from 'recharts';
-
-interface LatencyDistributionProps {
-  responseTimes: number[];  // Array of response times in ms
-  height?: number;
-}
-
-export const LatencyDistributionChart: FC<LatencyDistributionProps> = ({
-  responseTimes,
-  height = 200,
-}) => {
-  // Create histogram buckets
-  const { buckets, stats } = useMemo(() => {
-    if (responseTimes.length === 0) {
-      return { buckets: [], stats: { p50: 0, p95: 0, p99: 0, avg: 0 } };
-    }
-
-    const sorted = [...responseTimes].sort((a, b) => a - b);
-    const min = sorted[0];
-    const max = sorted[sorted.length - 1];
-
-    // Calculate percentiles
-    const p50 = sorted[Math.floor(sorted.length * 0.5)];
-    const p95 = sorted[Math.floor(sorted.length * 0.95)];
-    const p99 = sorted[Math.floor(sorted.length * 0.99)];
-    const avg = sorted.reduce((a, b) => a + b, 0) / sorted.length;
-
-    // Create ~20 buckets
-    const bucketCount = Math.min(20, sorted.length);
-    const bucketSize = (max - min) / bucketCount || 1;
-
-    const bucketMap: Record<number, number> = {};
-    for (let i = 0; i < bucketCount; i++) {
-      const bucketStart = min + i * bucketSize;
-      bucketMap[bucketStart] = 0;
-    }
-
-    // Count values in each bucket
-    sorted.forEach(value => {
-      const bucket = Math.floor((value - min) / bucketSize) * bucketSize + min;
-      bucketMap[bucket] = (bucketMap[bucket] || 0) + 1;
-    });
-
-    const buckets = Object.entries(bucketMap)
-      .map(([start, count]) => ({
-        start: Number(start),
-        count,
-        percentage: (count / sorted.length) * 100,
-      }))
-      .sort((a, b) => a.start - b.start);
-
-    return { buckets, stats: { p50, p95, p99, avg } };
-  }, [responseTimes]);
-
-  if (buckets.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-32 text-gray-400">
-        No latency data
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <ResponsiveContainer width="100%" height={height}>
-        <AreaChart data={buckets} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
-          <defs>
-            <linearGradient id="latencyGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
-              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1} />
-            </linearGradient>
-          </defs>
-
-          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-
-          <XAxis
-            dataKey="start"
-            tickFormatter={(v) => `${Math.round(v)}ms`}
-            tick={{ fill: '#6b7280', fontSize: 10 }}
-            tickLine={false}
-            axisLine={{ stroke: '#e5e7eb' }}
-          />
-
-          <YAxis
-            tickFormatter={(v) => `${v.toFixed(0)}%`}
-            tick={{ fill: '#6b7280', fontSize: 10 }}
-            tickLine={false}
-            axisLine={false}
-            width={40}
-          />
-
-          <Tooltip
-            formatter={(value: number) => [`${value.toFixed(1)}%`, 'Requests']}
-            labelFormatter={(label) => `${Math.round(label)}ms`}
-          />
-
-          {/* Reference lines for percentiles */}
-          <ReferenceLine
-            x={stats.p50}
-            stroke="#10b981"
-            strokeDasharray="3 3"
-            label={{ value: 'P50', position: 'top', fontSize: 10, fill: '#10b981' }}
-          />
-          <ReferenceLine
-            x={stats.p95}
-            stroke="#f59e0b"
-            strokeDasharray="3 3"
-            label={{ value: 'P95', position: 'top', fontSize: 10, fill: '#f59e0b' }}
-          />
-
-          <Area
-            type="monotone"
-            dataKey="percentage"
-            stroke="#3b82f6"
-            fill="url(#latencyGradient)"
-            strokeWidth={2}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-
-      {/* Stats summary */}
-      <div className="flex justify-around text-center mt-2">
-        <StatBox label="Avg" value={`${Math.round(stats.avg)}ms`} />
-        <StatBox label="P50" value={`${Math.round(stats.p50)}ms`} color="green" />
-        <StatBox label="P95" value={`${Math.round(stats.p95)}ms`} color="amber" />
-        <StatBox label="P99" value={`${Math.round(stats.p99)}ms`} color="red" />
-      </div>
+      ))}
     </div>
   );
 };
 
-const StatBox: FC<{ label: string; value: string; color?: string }> = ({
-  label,
-  value,
-  color = 'gray',
-}) => {
-  const colorClasses: Record<string, string> = {
-    gray: 'text-gray-600',
-    green: 'text-green-600',
-    amber: 'text-amber-600',
-    red: 'text-red-600',
-  };
+const ContentBlockRenderer: FC<{
+  block: ContentBlock;
+  showSystemReminders: boolean;
+}> = ({ block, showSystemReminders }) => {
+  switch (block.type) {
+    case 'text':
+      return (
+        <TextContent
+          text={block.text as string}
+          showSystemReminders={showSystemReminders}
+        />
+      );
 
-  return (
-    <div>
-      <div className="text-xs text-gray-400">{label}</div>
-      <div className={`font-semibold ${colorClasses[color]}`}>{value}</div>
-    </div>
-  );
+    case 'tool_use':
+      return (
+        <ToolUseContent
+          id={block.id as string}
+          name={block.name as string}
+          input={block.input as Record<string, unknown>}
+        />
+      );
+
+    case 'tool_result':
+      return (
+        <ToolResultContent
+          toolUseId={block.tool_use_id as string}
+          content={block.content as string | ContentBlock[]}
+          isError={block.is_error as boolean | undefined}
+        />
+      );
+
+    case 'image':
+      return <ImageContent source={block.source as ImageSource} />;
+
+    default:
+      // Fallback for unknown types - show raw JSON
+      return (
+        <details className="text-xs">
+          <summary className="cursor-pointer text-gray-500">
+            Unknown block type: {block.type}
+          </summary>
+          <pre className="mt-2 p-2 bg-gray-100 rounded overflow-x-auto">
+            {JSON.stringify(block, null, 2)}
+          </pre>
+        </details>
+      );
+  }
 };
 ```
 
----
+### TextContent.tsx - Text Rendering
 
-## Quick Stats Cards
-
-Reusable stat card component for summary metrics.
+The text content component needs to handle:
+1. Basic text display
+2. `<system-reminder>` tags (usually hidden)
+3. `<functions>` blocks (tool definitions from system prompts)
+4. Markdown-like formatting (bold, italic, code)
 
 ```tsx
-// dashboard/src/components/charts/StatCard.tsx
-import { type FC, type ReactNode } from 'react';
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+// dashboard/src/components/ui/TextContent.tsx
+import { type FC, useMemo } from 'react';
+import { SystemReminder } from './SystemReminder';
+import { FunctionDefinitions } from './FunctionDefinitions';
+
+interface TextContentProps {
+  text: string;
+  showSystemReminders?: boolean;
+}
+
+export const TextContent: FC<TextContentProps> = ({
+  text,
+  showSystemReminders = false
+}) => {
+  const { regularContent, systemReminders, functionBlocks } = useMemo(() => {
+    return parseTextContent(text);
+  }, [text]);
+
+  return (
+    <div className="space-y-2">
+      {/* Regular text content */}
+      {regularContent && (
+        <div
+          className="prose prose-sm max-w-none"
+          dangerouslySetInnerHTML={{ __html: formatText(regularContent) }}
+        />
+      )}
+
+      {/* Function definitions (from system prompts) */}
+      {functionBlocks.length > 0 && (
+        <FunctionDefinitions blocks={functionBlocks} />
+      )}
+
+      {/* System reminders (collapsible, usually hidden) */}
+      {showSystemReminders && systemReminders.length > 0 && (
+        <div className="space-y-2">
+          {systemReminders.map((reminder, i) => (
+            <SystemReminder key={i} content={reminder} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Parse text to extract special sections
+function parseTextContent(text: string): {
+  regularContent: string;
+  systemReminders: string[];
+  functionBlocks: string[];
+} {
+  const systemReminders: string[] = [];
+  const functionBlocks: string[] = [];
+
+  // Extract <system-reminder> tags
+  let regularContent = text.replace(
+    /<system-reminder>([\s\S]*?)<\/system-reminder>/g,
+    (_, content) => {
+      systemReminders.push(content.trim());
+      return '';
+    }
+  );
+
+  // Extract <functions> blocks
+  regularContent = regularContent.replace(
+    /<functions>([\s\S]*?)<\/functions>/g,
+    (_, content) => {
+      functionBlocks.push(content.trim());
+      return '';
+    }
+  );
+
+  return {
+    regularContent: regularContent.trim(),
+    systemReminders,
+    functionBlocks,
+  };
+}
+
+// Format text with markdown-like syntax
+function formatText(text: string): string {
+  let html = escapeHtml(text);
+
+  // Convert markdown-like syntax
+  // **bold** -> <strong>
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+  // *italic* -> <em>
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+  // `code` -> <code>
+  html = html.replace(/`([^`]+)`/g, '<code class="bg-gray-100 px-1 rounded text-sm">$1</code>');
+
+  // Line breaks
+  html = html.replace(/\n\n/g, '</p><p class="mt-2">');
+  html = html.replace(/\n/g, '<br>');
+
+  return `<p>${html}</p>`;
+}
+
+function escapeHtml(text: string): string {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+```
+
+### ToolUseContent.tsx - Tool Invocation Display
+
+```tsx
+// dashboard/src/components/ui/ToolUseContent.tsx
+import { type FC, useState } from 'react';
+import { ChevronDown, Terminal, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { CodeViewer } from './CodeViewer';
 
-interface StatCardProps {
-  title: string;
-  value: string | number;
-  subtitle?: string;
-  icon?: ReactNode;
-  trend?: {
-    value: number;  // Percentage change
-    label?: string;
-  };
-  className?: string;
+interface ToolUseContentProps {
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
 }
 
-export const StatCard: FC<StatCardProps> = ({
-  title,
-  value,
-  subtitle,
-  icon,
-  trend,
-  className,
-}) => {
-  const getTrendIcon = () => {
-    if (!trend) return null;
-    if (trend.value > 0) return <TrendingUp className="w-4 h-4" />;
-    if (trend.value < 0) return <TrendingDown className="w-4 h-4" />;
-    return <Minus className="w-4 h-4" />;
+// Special rendering for common tools
+const SPECIAL_TOOLS = ['bash', 'read_file', 'write_file', 'edit_file', 'glob', 'grep'];
+
+export const ToolUseContent: FC<ToolUseContentProps> = ({ id, name, input }) => {
+  const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copyId = async () => {
+    await navigator.clipboard.writeText(id);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
-  const getTrendColor = () => {
-    if (!trend) return '';
-    if (trend.value > 0) return 'text-green-600';
-    if (trend.value < 0) return 'text-red-600';
-    return 'text-gray-400';
-  };
+  const isSpecialTool = SPECIAL_TOOLS.includes(name);
 
   return (
-    <div className={cn(
-      "bg-white rounded-xl border border-gray-200 p-4 shadow-sm",
-      className
-    )}>
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="text-sm text-gray-500 font-medium">{title}</div>
-          <div className="text-2xl font-bold text-gray-900 mt-1">{value}</div>
-          {subtitle && (
-            <div className="text-xs text-gray-400 mt-1">{subtitle}</div>
+    <div className="border rounded-lg bg-gradient-to-r from-indigo-50 to-blue-50 overflow-hidden">
+      {/* Header */}
+      <div
+        className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-white/50 transition-colors"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="flex items-center gap-2">
+          <Terminal className="w-4 h-4 text-indigo-600" />
+          <span className="font-medium text-indigo-900">{name}</span>
+          <button
+            onClick={(e) => { e.stopPropagation(); copyId(); }}
+            className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"
+          >
+            {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+            <span className="font-mono">{id.slice(-8)}</span>
+          </button>
+        </div>
+        <ChevronDown
+          className={cn(
+            "w-4 h-4 text-gray-400 transition-transform",
+            expanded && "rotate-180"
+          )}
+        />
+      </div>
+
+      {/* Tool Input */}
+      {expanded && (
+        <div className="px-4 py-3 border-t bg-white/50">
+          {isSpecialTool ? (
+            <SpecialToolInput name={name} input={input} />
+          ) : (
+            <GenericToolInput input={input} />
           )}
         </div>
-        {icon && (
-          <div className="p-2 bg-gray-50 rounded-lg text-gray-400">
-            {icon}
+      )}
+
+      {/* Execution indicator (pulsing dot) */}
+      <div className="px-4 py-1 bg-indigo-100/50 text-xs text-indigo-600 flex items-center gap-2">
+        <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
+        Executing tool...
+      </div>
+    </div>
+  );
+};
+
+// Special rendering for common tools
+const SpecialToolInput: FC<{ name: string; input: Record<string, unknown> }> = ({ name, input }) => {
+  switch (name) {
+    case 'bash':
+      return (
+        <div className="font-mono text-sm bg-gray-900 text-gray-100 p-3 rounded">
+          <span className="text-green-400">$ </span>
+          {String(input.command || '')}
+        </div>
+      );
+
+    case 'read_file':
+      return (
+        <div className="text-sm">
+          <span className="text-gray-500">Reading: </span>
+          <span className="font-mono text-blue-600">{String(input.path || input.file_path || '')}</span>
+        </div>
+      );
+
+    case 'write_file':
+    case 'edit_file':
+      const content = String(input.content || input.new_content || '');
+      const path = String(input.path || input.file_path || '');
+      return (
+        <div className="space-y-2">
+          <div className="text-sm">
+            <span className="text-gray-500">{name === 'write_file' ? 'Writing to' : 'Editing'}: </span>
+            <span className="font-mono text-blue-600">{path}</span>
           </div>
-        )}
+          {content && (
+            <CodeViewer
+              code={content}
+              language={getLanguageFromPath(path)}
+              maxHeight={200}
+            />
+          )}
+        </div>
+      );
+
+    default:
+      return <GenericToolInput input={input} />;
+  }
+};
+
+const GenericToolInput: FC<{ input: Record<string, unknown> }> = ({ input }) => {
+  const entries = Object.entries(input);
+
+  if (entries.length === 0) {
+    return <span className="text-gray-400 text-sm italic">No parameters</span>;
+  }
+
+  return (
+    <div className="space-y-2">
+      {entries.map(([key, value]) => (
+        <div key={key} className="text-sm">
+          <span className="text-gray-500">{key}: </span>
+          <ToolInputValue value={value} />
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const ToolInputValue: FC<{ value: unknown }> = ({ value }) => {
+  if (typeof value === 'string') {
+    // Truncate long strings
+    if (value.length > 200 || value.includes('\n')) {
+      return (
+        <details className="inline">
+          <summary className="cursor-pointer text-blue-600">
+            Show content ({value.length} chars)
+          </summary>
+          <pre className="mt-1 p-2 bg-gray-100 rounded text-xs overflow-x-auto">
+            {value}
+          </pre>
+        </details>
+      );
+    }
+    return <span className="font-mono">{value}</span>;
+  }
+
+  if (typeof value === 'object') {
+    return (
+      <details className="inline">
+        <summary className="cursor-pointer text-blue-600">
+          Show object ({Object.keys(value as object).length} properties)
+        </summary>
+        <pre className="mt-1 p-2 bg-gray-100 rounded text-xs overflow-x-auto">
+          {JSON.stringify(value, null, 2)}
+        </pre>
+      </details>
+    );
+  }
+
+  return <span className="font-mono">{String(value)}</span>;
+};
+
+function getLanguageFromPath(path: string): string {
+  const ext = path.split('.').pop()?.toLowerCase() || '';
+  const languageMap: Record<string, string> = {
+    ts: 'typescript', tsx: 'typescript',
+    js: 'javascript', jsx: 'javascript',
+    py: 'python',
+    go: 'go',
+    rs: 'rust',
+    md: 'markdown',
+    json: 'json',
+    yaml: 'yaml', yml: 'yaml',
+    sh: 'bash', bash: 'bash',
+    css: 'css', scss: 'css',
+    html: 'html',
+    sql: 'sql',
+  };
+  return languageMap[ext] || 'text';
+}
+```
+
+### ToolResultContent.tsx - Tool Result Display
+
+```tsx
+// dashboard/src/components/ui/ToolResultContent.tsx
+import { type FC, useState, useMemo } from 'react';
+import { CheckCircle, XCircle, ChevronDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { CodeViewer } from './CodeViewer';
+import { MessageContent } from './MessageContent';
+
+interface ToolResultContentProps {
+  toolUseId: string;
+  content: string | ContentBlock[];
+  isError?: boolean;
+}
+
+interface ContentBlock {
+  type: string;
+  [key: string]: unknown;
+}
+
+export const ToolResultContent: FC<ToolResultContentProps> = ({
+  toolUseId,
+  content,
+  isError = false
+}) => {
+  const [expanded, setExpanded] = useState(!isError); // Collapse errors by default
+
+  // Detect content type
+  const { contentType, processedContent } = useMemo(() => {
+    if (typeof content !== 'string') {
+      return { contentType: 'blocks' as const, processedContent: content };
+    }
+
+    // Detect code (cat -n format with line numbers)
+    if (/^\s*\d+[→\t]/.test(content)) {
+      return {
+        contentType: 'code' as const,
+        processedContent: extractCodeFromCatN(content)
+      };
+    }
+
+    // Detect JSON
+    if (content.trim().startsWith('{') || content.trim().startsWith('[')) {
+      try {
+        JSON.parse(content);
+        return { contentType: 'json' as const, processedContent: content };
+      } catch {
+        // Not valid JSON
+      }
+    }
+
+    // Detect code by keywords
+    if (hasCodeIndicators(content)) {
+      return { contentType: 'code' as const, processedContent: content };
+    }
+
+    return { contentType: 'text' as const, processedContent: content };
+  }, [content]);
+
+  const bgColor = isError
+    ? 'bg-gradient-to-r from-red-50 to-rose-50'
+    : 'bg-gradient-to-r from-emerald-50 to-green-50';
+
+  const borderColor = isError ? 'border-red-200' : 'border-emerald-200';
+
+  return (
+    <div className={cn("border rounded-lg overflow-hidden", borderColor, bgColor)}>
+      {/* Header */}
+      <div
+        className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-white/50 transition-colors"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="flex items-center gap-2">
+          {isError ? (
+            <XCircle className="w-4 h-4 text-red-500" />
+          ) : (
+            <CheckCircle className="w-4 h-4 text-emerald-500" />
+          )}
+          <span className={cn(
+            "font-medium",
+            isError ? "text-red-700" : "text-emerald-700"
+          )}>
+            {isError ? 'Error' : 'Result'}
+          </span>
+          <span className="text-xs text-gray-400 font-mono">
+            {toolUseId.slice(-8)}
+          </span>
+          <span className="text-xs text-gray-400 px-2 py-0.5 bg-white/50 rounded">
+            {contentType}
+          </span>
+        </div>
+        <ChevronDown
+          className={cn(
+            "w-4 h-4 text-gray-400 transition-transform",
+            expanded && "rotate-180"
+          )}
+        />
       </div>
 
-      {trend && (
-        <div className={cn("flex items-center gap-1 mt-3 text-sm", getTrendColor())}>
-          {getTrendIcon()}
-          <span className="font-medium">
-            {trend.value > 0 ? '+' : ''}{trend.value.toFixed(1)}%
-          </span>
-          {trend.label && <span className="text-gray-400">{trend.label}</span>}
+      {/* Content */}
+      {expanded && (
+        <div className="px-4 py-3 border-t bg-white/50">
+          <ToolResultBody
+            contentType={contentType}
+            content={processedContent}
+            isError={isError}
+          />
         </div>
       )}
     </div>
   );
 };
+
+const ToolResultBody: FC<{
+  contentType: 'text' | 'code' | 'json' | 'blocks';
+  content: string | ContentBlock[];
+  isError: boolean;
+}> = ({ contentType, content, isError }) => {
+  if (contentType === 'blocks') {
+    return <MessageContent content={content as ContentBlock[]} />;
+  }
+
+  const text = content as string;
+
+  // Truncate very long content
+  const MAX_LENGTH = 500;
+  const [showFull, setShowFull] = useState(text.length <= MAX_LENGTH);
+  const displayText = showFull ? text : text.slice(0, MAX_LENGTH);
+
+  switch (contentType) {
+    case 'code':
+      return (
+        <div>
+          <CodeViewer code={displayText} language="text" maxHeight={300} />
+          {!showFull && (
+            <button
+              onClick={() => setShowFull(true)}
+              className="mt-2 text-sm text-blue-600 hover:underline"
+            >
+              Show full content ({text.length} chars)
+            </button>
+          )}
+        </div>
+      );
+
+    case 'json':
+      return (
+        <pre className="p-3 bg-gray-900 text-gray-100 rounded text-xs overflow-x-auto">
+          {JSON.stringify(JSON.parse(text), null, 2)}
+        </pre>
+      );
+
+    default:
+      return (
+        <div className={cn(
+          "text-sm whitespace-pre-wrap",
+          isError && "text-red-600"
+        )}>
+          {displayText}
+          {!showFull && (
+            <>
+              <span className="text-gray-400">...</span>
+              <button
+                onClick={() => setShowFull(true)}
+                className="ml-2 text-blue-600 hover:underline"
+              >
+                Show more
+              </button>
+            </>
+          )}
+        </div>
+      );
+  }
+};
+
+// Extract code from cat -n format (line numbers with arrow or tab)
+function extractCodeFromCatN(text: string): string {
+  return text
+    .split('\n')
+    .map(line => {
+      // Match: "   123→content" or "   123\tcontent"
+      const match = line.match(/^\s*\d+[→\t](.*)$/);
+      return match ? match[1] : line;
+    })
+    .join('\n');
+}
+
+// Detect if content looks like code
+function hasCodeIndicators(text: string): boolean {
+  const codePatterns = [
+    /^(import|from|const|let|var|function|class|def|func|package)\s/m,
+    /[{}\[\]];?\s*$/m,
+    /^\s*(if|for|while|return|throw)\s*\(/m,
+    /=>\s*{/,
+    /\bexport\s+(default\s+)?/,
+  ];
+  return codePatterns.some(pattern => pattern.test(text));
+}
 ```
 
 ---
 
-## Date Navigation Component
+## Topic 2: Code Viewer with Syntax Highlighting
 
-For navigating between dates/weeks.
+### What You're Building
+
+A syntax-highlighted code viewer with:
+- Custom single-pass syntax highlighting (no external library)
+- Line numbers
+- Language detection from filename
+- Copy button
+- Optional fullscreen mode
+- Download button
+
+### CodeViewer.tsx
 
 ```tsx
-// dashboard/src/components/charts/DateNavigation.tsx
-import { type FC } from 'react';
-import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+// dashboard/src/components/ui/CodeViewer.tsx
+import { type FC, useState, useMemo, useRef } from 'react';
+import { Copy, Check, Download, Maximize2, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-interface DateNavigationProps {
-  selectedDate: Date;
-  onDateChange: (date: Date) => void;
-  mode?: 'day' | 'week';
-  disableForward?: boolean;  // Disable going past today
+interface CodeViewerProps {
+  code: string;
+  language?: string;
+  filename?: string;
+  maxHeight?: number;
+  showLineNumbers?: boolean;
+  showControls?: boolean;
 }
 
-export const DateNavigation: FC<DateNavigationProps> = ({
-  selectedDate,
-  onDateChange,
-  mode = 'day',
-  disableForward = true,
+export const CodeViewer: FC<CodeViewerProps> = ({
+  code,
+  language: providedLanguage,
+  filename,
+  maxHeight = 400,
+  showLineNumbers = true,
+  showControls = true,
 }) => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const [copied, setCopied] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  const codeRef = useRef<HTMLPreElement>(null);
 
-  const isAtToday = selectedDate >= today;
+  // Determine language from filename or provided value
+  const language = useMemo(() => {
+    if (providedLanguage) return providedLanguage;
+    if (filename) return getLanguageFromFilename(filename);
+    return 'text';
+  }, [providedLanguage, filename]);
 
-  const goBack = () => {
-    const newDate = new Date(selectedDate);
-    if (mode === 'week') {
-      newDate.setDate(newDate.getDate() - 7);
-    } else {
-      newDate.setDate(newDate.getDate() - 1);
-    }
-    onDateChange(newDate);
+  // Apply syntax highlighting
+  const highlightedLines = useMemo(() => {
+    const lines = code.split('\n');
+    return lines.map(line => highlightLine(line, language));
+  }, [code, language]);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
-  const goForward = () => {
-    if (disableForward && isAtToday) return;
-
-    const newDate = new Date(selectedDate);
-    if (mode === 'week') {
-      newDate.setDate(newDate.getDate() + 7);
-    } else {
-      newDate.setDate(newDate.getDate() + 1);
-    }
-    onDateChange(newDate);
+  const handleDownload = () => {
+    const blob = new Blob([code], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || `code.${getExtension(language)}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
-  const goToToday = () => {
-    onDateChange(new Date());
+  const codeContent = (
+    <div className={cn(
+      "relative bg-gray-900 rounded-lg overflow-hidden",
+      fullscreen && "fixed inset-4 z-50 flex flex-col"
+    )}>
+      {/* Header with controls */}
+      {showControls && (
+        <div className="flex items-center justify-between px-4 py-2 bg-gray-800 text-gray-400 text-xs">
+          <div className="flex items-center gap-2">
+            {filename && <span className="font-mono">{filename}</span>}
+            <span className="px-2 py-0.5 bg-gray-700 rounded">{language}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleCopy}
+              className="p-1.5 hover:bg-gray-700 rounded transition-colors"
+              title="Copy to clipboard"
+            >
+              {copied ? (
+                <Check className="w-4 h-4 text-green-400" />
+              ) : (
+                <Copy className="w-4 h-4" />
+              )}
+            </button>
+            <button
+              onClick={handleDownload}
+              className="p-1.5 hover:bg-gray-700 rounded transition-colors"
+              title="Download file"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setFullscreen(!fullscreen)}
+              className="p-1.5 hover:bg-gray-700 rounded transition-colors"
+              title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
+            >
+              {fullscreen ? (
+                <X className="w-4 h-4" />
+              ) : (
+                <Maximize2 className="w-4 h-4" />
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Code content */}
+      <pre
+        ref={codeRef}
+        className={cn(
+          "overflow-auto text-sm leading-relaxed",
+          fullscreen ? "flex-1" : ""
+        )}
+        style={{ maxHeight: fullscreen ? undefined : maxHeight }}
+      >
+        <table className="w-full border-collapse">
+          <tbody>
+            {highlightedLines.map((html, i) => (
+              <tr key={i} className="hover:bg-gray-800/50">
+                {showLineNumbers && (
+                  <td className="select-none text-right pr-4 pl-4 text-gray-500 border-r border-gray-700 align-top">
+                    {i + 1}
+                  </td>
+                )}
+                <td
+                  className="pl-4 pr-4 text-gray-100"
+                  dangerouslySetInnerHTML={{ __html: html || '&nbsp;' }}
+                />
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </pre>
+    </div>
+  );
+
+  // Fullscreen backdrop
+  if (fullscreen) {
+    return (
+      <>
+        <div
+          className="fixed inset-0 bg-black/80 z-40"
+          onClick={() => setFullscreen(false)}
+        />
+        {codeContent}
+      </>
+    );
+  }
+
+  return codeContent;
+};
+
+// Syntax highlighting - single pass, no external dependencies
+function highlightLine(line: string, language: string): string {
+  let result = escapeHtml(line);
+
+  // Don't highlight plain text
+  if (language === 'text') return result;
+
+  // Order matters! Apply patterns from most to least specific
+
+  // 1. Strings (double quotes, single quotes, backticks)
+  result = result.replace(
+    /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g,
+    '<span class="text-amber-300">$1</span>'
+  );
+
+  // 2. Comments
+  result = result.replace(
+    /(\/\/.*$|#.*$)/gm,
+    '<span class="text-gray-500 italic">$1</span>'
+  );
+
+  // 3. Keywords (language-specific)
+  const keywords = getKeywords(language);
+  if (keywords.length > 0) {
+    const keywordPattern = new RegExp(
+      `\\b(${keywords.join('|')})\\b(?![^<]*>)`,
+      'g'
+    );
+    result = result.replace(
+      keywordPattern,
+      '<span class="text-purple-400">$1</span>'
+    );
+  }
+
+  // 4. Literals (true, false, null, undefined, None, etc.)
+  result = result.replace(
+    /\b(true|false|null|undefined|None|True|False|nil)\b(?![^<]*>)/g,
+    '<span class="text-orange-400">$1</span>'
+  );
+
+  // 5. Numbers
+  result = result.replace(
+    /\b(\d+\.?\d*)\b(?![^<]*>)/g,
+    '<span class="text-cyan-300">$1</span>'
+  );
+
+  // 6. PascalCase identifiers (likely types/classes)
+  result = result.replace(
+    /\b([A-Z][a-zA-Z0-9]*)\b(?![^<]*>)/g,
+    '<span class="text-yellow-200">$1</span>'
+  );
+
+  return result;
+}
+
+function getKeywords(language: string): string[] {
+  const keywordSets: Record<string, string[]> = {
+    javascript: ['const', 'let', 'var', 'function', 'class', 'extends', 'return', 'if', 'else', 'for', 'while', 'switch', 'case', 'break', 'continue', 'import', 'export', 'default', 'from', 'async', 'await', 'try', 'catch', 'throw', 'new', 'this', 'typeof', 'instanceof'],
+    typescript: ['const', 'let', 'var', 'function', 'class', 'extends', 'return', 'if', 'else', 'for', 'while', 'switch', 'case', 'break', 'continue', 'import', 'export', 'default', 'from', 'async', 'await', 'try', 'catch', 'throw', 'new', 'this', 'typeof', 'instanceof', 'interface', 'type', 'enum', 'implements', 'private', 'public', 'protected', 'readonly'],
+    python: ['def', 'class', 'return', 'if', 'elif', 'else', 'for', 'while', 'try', 'except', 'finally', 'raise', 'import', 'from', 'as', 'with', 'lambda', 'yield', 'assert', 'pass', 'break', 'continue', 'global', 'nonlocal', 'async', 'await'],
+    go: ['func', 'package', 'import', 'var', 'const', 'type', 'struct', 'interface', 'map', 'chan', 'go', 'defer', 'return', 'if', 'else', 'for', 'range', 'switch', 'case', 'default', 'break', 'continue', 'fallthrough', 'select'],
+    rust: ['fn', 'let', 'mut', 'const', 'struct', 'enum', 'impl', 'trait', 'pub', 'mod', 'use', 'return', 'if', 'else', 'for', 'while', 'loop', 'match', 'break', 'continue', 'async', 'await', 'move', 'ref', 'self', 'Self', 'where'],
+    bash: ['if', 'then', 'else', 'elif', 'fi', 'for', 'while', 'do', 'done', 'case', 'esac', 'function', 'return', 'exit', 'export', 'local', 'readonly', 'declare', 'unset', 'source', 'alias'],
   };
 
-  const formatDate = (date: Date): string => {
-    if (mode === 'week') {
-      const start = getWeekStart(date);
-      const end = new Date(start);
-      end.setDate(end.getDate() + 6);
-      return `${formatShortDate(start)} - ${formatShortDate(end)}`;
+  return keywordSets[language] || keywordSets.javascript || [];
+}
+
+function getLanguageFromFilename(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase() || '';
+  const languageMap: Record<string, string> = {
+    ts: 'typescript', tsx: 'typescript', mts: 'typescript', cts: 'typescript',
+    js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
+    py: 'python', pyw: 'python',
+    go: 'go',
+    rs: 'rust',
+    md: 'markdown', mdx: 'markdown',
+    json: 'json', jsonc: 'json',
+    yaml: 'yaml', yml: 'yaml',
+    sh: 'bash', bash: 'bash', zsh: 'bash',
+    css: 'css', scss: 'css', sass: 'css', less: 'css',
+    html: 'html', htm: 'html',
+    sql: 'sql',
+    dockerfile: 'docker',
+    makefile: 'make',
+    toml: 'toml',
+    xml: 'xml',
+  };
+  return languageMap[ext] || 'text';
+}
+
+function getExtension(language: string): string {
+  const extMap: Record<string, string> = {
+    typescript: 'ts',
+    javascript: 'js',
+    python: 'py',
+    go: 'go',
+    rust: 'rs',
+    bash: 'sh',
+    json: 'json',
+    yaml: 'yaml',
+    markdown: 'md',
+    html: 'html',
+    css: 'css',
+    sql: 'sql',
+  };
+  return extMap[language] || 'txt';
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+```
+
+---
+
+## Topic 3: Copy-to-Clipboard
+
+### What You're Building
+
+A reusable hook and button component for copying content with visual feedback.
+
+### useCopyToClipboard.ts
+
+```tsx
+// dashboard/src/lib/hooks/useCopyToClipboard.ts
+import { useState, useCallback } from 'react';
+
+interface UseCopyToClipboardReturn {
+  copied: boolean;
+  copy: (text: string) => Promise<void>;
+  reset: () => void;
+}
+
+export function useCopyToClipboard(resetDelay = 2000): UseCopyToClipboardReturn {
+  const [copied, setCopied] = useState(false);
+
+  const copy = useCallback(async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), resetDelay);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      // Fallback for older browsers
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand('copy');
+        setCopied(true);
+        setTimeout(() => setCopied(false), resetDelay);
+      } finally {
+        document.body.removeChild(textarea);
+      }
     }
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    });
+  }, [resetDelay]);
+
+  const reset = useCallback(() => setCopied(false), []);
+
+  return { copied, copy, reset };
+}
+```
+
+### CopyButton.tsx
+
+```tsx
+// dashboard/src/components/ui/CopyButton.tsx
+import { type FC } from 'react';
+import { Copy, Check } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { useCopyToClipboard } from '@/lib/hooks/useCopyToClipboard';
+
+interface CopyButtonProps {
+  content: string;
+  className?: string;
+  size?: 'sm' | 'md' | 'lg';
+  variant?: 'default' | 'ghost' | 'outline';
+  label?: string;
+}
+
+export const CopyButton: FC<CopyButtonProps> = ({
+  content,
+  className,
+  size = 'sm',
+  variant = 'ghost',
+  label,
+}) => {
+  const { copied, copy } = useCopyToClipboard();
+
+  const sizeClasses = {
+    sm: 'p-1.5',
+    md: 'p-2',
+    lg: 'p-2.5',
+  };
+
+  const iconSizes = {
+    sm: 'w-3.5 h-3.5',
+    md: 'w-4 h-4',
+    lg: 'w-5 h-5',
+  };
+
+  const variantClasses = {
+    default: 'bg-gray-200 hover:bg-gray-300 text-gray-700',
+    ghost: 'hover:bg-gray-100 text-gray-500 hover:text-gray-700',
+    outline: 'border border-gray-300 hover:bg-gray-50 text-gray-600',
   };
 
   return (
-    <div className="flex items-center gap-2">
-      <button
-        onClick={goBack}
-        className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-        title={mode === 'week' ? 'Previous week' : 'Previous day'}
-      >
-        <ChevronLeft className="w-5 h-5 text-gray-600" />
-      </button>
-
-      <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg min-w-[180px] justify-center">
-        <Calendar className="w-4 h-4 text-gray-400" />
-        <span className="text-sm font-medium text-gray-700">
-          {formatDate(selectedDate)}
-        </span>
-      </div>
-
-      <button
-        onClick={goForward}
-        disabled={disableForward && isAtToday}
-        className={cn(
-          "p-2 rounded-lg transition-colors",
-          disableForward && isAtToday
-            ? "text-gray-300 cursor-not-allowed"
-            : "hover:bg-gray-100 text-gray-600"
-        )}
-        title={mode === 'week' ? 'Next week' : 'Next day'}
-      >
-        <ChevronRight className="w-5 h-5" />
-      </button>
-
-      {!isAtToday && (
-        <button
-          onClick={goToToday}
-          className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-        >
-          Today
-        </button>
+    <button
+      onClick={() => copy(content)}
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded transition-colors',
+        sizeClasses[size],
+        variantClasses[variant],
+        className
       )}
-    </div>
+      title={copied ? 'Copied!' : 'Copy to clipboard'}
+    >
+      {copied ? (
+        <Check className={cn(iconSizes[size], 'text-green-500')} />
+      ) : (
+        <Copy className={iconSizes[size]} />
+      )}
+      {label && <span className="text-xs">{label}</span>}
+    </button>
   );
 };
-
-function getWeekStart(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay();
-  d.setDate(d.getDate() - day);  // Go to Sunday
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function formatShortDate(date: Date): string {
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
 ```
 
 ---
 
-## Integration with Existing Pages
+## Integration Points
 
-### Update Dashboard.tsx
+### Where to Use These Components
 
-```tsx
-// Replace existing charts with your new components:
+1. **Requests.tsx** - Replace raw JSON display with MessageContent
+2. **ConversationDetail** - Use MessageContent for conversation messages
+3. **Request Headers** - Use CopyButton for copying header values
+4. **Request/Response JSON** - Use CopyButton for full JSON copy
 
-import { WeeklyUsageChart } from '@/components/charts/WeeklyUsageChart';
-import { HourlyUsageChart } from '@/components/charts/HourlyUsageChart';
-import { ModelBreakdownChart } from '@/components/charts/ModelBreakdownChart';
-import { StatCard } from '@/components/charts/StatCard';
-import { DateNavigation } from '@/components/charts/DateNavigation';
-
-// In the component:
-<DateNavigation
-  selectedDate={selectedDate}
-  onDateChange={setSelectedDate}
-  mode="day"
-/>
-
-<WeeklyUsageChart
-  data={weeklyStats.dailyStats}
-  selectedDate={formatDateString(selectedDate)}
-  onDateSelect={(date) => setSelectedDate(new Date(date))}
-/>
-
-<HourlyUsageChart
-  data={hourlyStats.hourlyStats}
-  isToday={isToday(selectedDate)}
-/>
-```
-
----
-
-## Utility Functions
-
-Create a central file for chart utilities:
+### Example Integration in Requests.tsx
 
 ```tsx
-// dashboard/src/lib/chartUtils.ts
-export { formatTokens, getModelColor, getModelDisplayName } from '@/components/charts/WeeklyUsageChart';
+// In the request detail panel, replace:
+<pre>{JSON.stringify(request.body, null, 2)}</pre>
 
-export function formatDuration(ms: number): string {
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${(ms / 60000).toFixed(1)}m`;
-}
-
-export function getWeekBoundaries(date: Date): { start: Date; end: Date } {
-  const start = new Date(date);
-  start.setDate(start.getDate() - start.getDay());  // Sunday
-  start.setHours(0, 0, 0, 0);
-
-  const end = new Date(start);
-  end.setDate(end.getDate() + 6);  // Saturday
-  end.setHours(23, 59, 59, 999);
-
-  return { start, end };
-}
-
-export function getDayBoundaries(date: Date): { start: Date; end: Date } {
-  const start = new Date(date);
-  start.setHours(0, 0, 0, 0);
-
-  const end = new Date(date);
-  end.setHours(23, 59, 59, 999);
-
-  return { start, end };
-}
-
-export function toISODateString(date: Date): string {
-  return date.toISOString().split('T')[0];
-}
-
-export function isToday(date: Date): boolean {
-  const today = new Date();
-  return toISODateString(date) === toISODateString(today);
-}
+// With:
+<MessageContent
+  content={request.body.messages || []}
+  showSystemReminders={false}
+/>
 ```
 
 ---
 
 ## Testing Checklist
 
-### Weekly Usage Chart
-- [ ] Shows 7 days (Sunday-Saturday)
-- [ ] Stacked bars by model with correct colors
-- [ ] Day name labels on X-axis
-- [ ] Token values on Y-axis with K/M/B formatting
-- [ ] Tooltip shows model breakdown
-- [ ] Average reference line displayed
-- [ ] "Today" highlighted if in view
-- [ ] Click on bar selects that date
-- [ ] Empty days show empty bar
+### Message Content Parser
+- [ ] Renders plain text content
+- [ ] Renders array of text blocks
+- [ ] Renders tool_use blocks with all parameter types
+- [ ] Renders tool_result blocks (success and error)
+- [ ] Renders image blocks (base64)
+- [ ] Extracts and hides system-reminder tags
+- [ ] Extracts and displays function blocks
+- [ ] Falls back gracefully for unknown block types
+- [ ] Handles nested content in tool results
 
-### Hourly Usage Chart
-- [ ] Shows 24 hours
-- [ ] Stacked areas by model
-- [ ] Hour labels at 12AM, 6AM, 12PM, 6PM
-- [ ] "Now" indicator when viewing today
-- [ ] Tooltip shows model breakdown
-- [ ] Fills missing hours with zero
+### Code Viewer
+- [ ] Shows line numbers correctly
+- [ ] Highlights syntax for JavaScript/TypeScript
+- [ ] Highlights syntax for Python
+- [ ] Highlights syntax for Go
+- [ ] Copy button works and shows feedback
+- [ ] Download button triggers file download
+- [ ] Fullscreen mode works
+- [ ] Language detection from filename works
+- [ ] Handles very long files (performance)
 
-### Model Breakdown Charts
-- [ ] Pie chart shows token distribution
-- [ ] Center displays total
-- [ ] Legend shows percentages
-- [ ] Bar chart sorted by tokens (descending)
-- [ ] Correct colors per model
-- [ ] Tooltip shows tokens, requests, avg/request
-
-### Performance Charts
-- [ ] Multi-bar shows P50, P95, P99
-- [ ] Colors distinguish percentiles (green/amber/red)
-- [ ] Tooltip shows all stats including TTFB
-- [ ] Distribution histogram if data available
-- [ ] Stats summary below chart
-
-### Date Navigation
-- [ ] Prev/Next buttons work
-- [ ] Can't go past today (by default)
-- [ ] "Today" button appears when not at today
-- [ ] Week mode shows date range
+### Copy to Clipboard
+- [ ] Copy works in modern browsers
+- [ ] Fallback works for older browsers
+- [ ] Visual feedback shows for 2 seconds
+- [ ] Multiple copy buttons track state independently
 
 ---
 
 ## Common Gotchas
 
-1. **Timezone Handling**: All API dates are UTC. Convert to local for display, back to UTC for API calls.
-2. **Sunday-Saturday Weeks**: Not Monday-Sunday. Use `date.getDay()` (Sunday = 0).
-3. **Empty Data**: Always handle empty arrays gracefully - show "No data" message.
-4. **Token Formatting**: Use consistent formatting (K, M, B) everywhere.
-5. **Memoization**: Charts re-render expensively. Use `useMemo` for data transformations.
-6. **Responsive Design**: All charts must work on different screen sizes. Use `ResponsiveContainer`.
-7. **Color Consistency**: Model colors must be identical across all charts.
+1. **XSS Prevention**: Always escape HTML before inserting into DOM with dangerouslySetInnerHTML
+2. **Content Type Detection**: The order of checks matters - check most specific patterns first
+3. **Performance**: Memoize heavy computations (syntax highlighting, content parsing)
+4. **Keyboard Accessibility**: Copy buttons should be focusable and work with Enter key
+5. **Cat -n Format**: Tool results often contain line numbers like "   1→code" - strip them before display
 
 ---
 
-## Reference Files
+## Reference Files (in /web directory)
 
-Study these in the old dashboard:
-- `web/app/components/UsageDashboard.tsx` - Complete reference (450+ lines)
-- `web/app/routes/_index.tsx` - Date navigation, stats loading patterns
+Study these files in the old dashboard for patterns:
+- `web/app/components/MessageContent.tsx` - Content rendering logic
+- `web/app/components/CodeViewer.tsx` - Syntax highlighting approach
+- `web/app/components/ToolUse.tsx` - Tool invocation display
+- `web/app/components/ToolResult.tsx` - Result rendering with type detection
+- `web/app/utils/formatters.ts` - Text formatting utilities
 
 ---
 
 ## Definition of Done
 
-Phase 4 is complete when:
+Phase 2 is complete when:
 
-1. Weekly usage chart with model breakdown works
-2. Hourly usage chart with "now" indicator works
-3. Model breakdown pie and bar charts work
-4. Performance percentile charts work
-5. Date navigation works (day and week modes)
-6. Stat cards display summary metrics
-7. All charts use consistent colors and formatting
-8. Charts are responsive and performant
-9. No TypeScript errors in strict mode
-10. Commit history shows logical, atomic commits
+1. All three topics are implemented and tested
+2. `MessageContent` correctly renders all Anthropic message types
+3. `CodeViewer` displays code with syntax highlighting and controls
+4. `CopyButton` provides consistent copy-to-clipboard across the app
+5. `Requests.tsx` uses these components instead of raw JSON
+6. No TypeScript errors in strict mode
+7. All components export from `components/ui/index.ts`
+8. Commit history shows logical, atomic commits
 
 ---
 
-**Make the data beautiful. Users love charts that tell a story.**
+**Good luck, island agent. You've got this.**
