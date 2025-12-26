@@ -85,6 +85,19 @@ export function useLatestRequestDate() {
 }
 
 // ============================================================================
+// Data Management
+// ============================================================================
+
+export async function clearAllRequests(): Promise<void> {
+  await fetch(`${API_BASE}/requests`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  })
+}
+
+// ============================================================================
 // Stats Queries
 // ============================================================================
 

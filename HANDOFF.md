@@ -1,20 +1,20 @@
-# Phase 4: Charts & Analytics - Implementation Handoff
+# Phase 5: Advanced Features - Implementation Handoff
 
-**Branch:** `phase-4-charts-analytics`
-**Epic:** `brandon-fryslie_claude-code-proxy-loz` (weekly-usage-chart), `brandon-fryslie_claude-code-proxy-xwb` (model-breakdown-stats), `brandon-fryslie_claude-code-proxy-eee` (performance-metrics)
+**Branch:** `phase-5-advanced-features`
+**Epic:** `brandon-fryslie_claude-code-proxy-wa1` (request-comparison), `brandon-fryslie_claude-code-proxy-jaq` (conversation-threads), `brandon-fryslie_claude-code-proxy-5jo` (data-management)
 
 ---
 
 ## Executive Summary
 
-You are implementing the **Charts & Analytics** system for the new dashboard. Your work transforms raw token/request data into beautiful, interactive visualizations that help users understand their Claude API usage patterns.
+You are implementing the **Advanced Features** for the new dashboard. These are power-user features that enable deep analysis and efficient data management.
 
-**Prerequisites:** The new dashboard already has Recharts installed and basic charts in place. You're enhancing and expanding these visualizations.
+**Prerequisites:** Phases 2-4 should be complete. You'll build on top of message rendering, tool display, and chart components.
 
 Your deliverables:
-1. **Weekly Usage Chart** - 7-day stacked bar chart with model breakdown
-2. **Model Breakdown Stats** - Per-model token/request analysis with pie/bar charts
-3. **Performance Metrics** - Response time percentiles, latency distribution
+1. **Request Comparison** - Side-by-side diff view for comparing two requests
+2. **Conversation Threads** - Full message thread display with user/assistant bubbles
+3. **Data Management** - Refresh, clear, settings persistence, auto-refresh
 
 ---
 
@@ -27,1497 +27,1291 @@ Your deliverables:
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── layout/
-│   │   │   ├── ui/
-│   │   │   └── charts/     # CREATE THIS - your chart components
+│   │   │   ├── ui/         # Phase 2-3 components
+│   │   │   ├── charts/     # Phase 4 components
+│   │   │   └── features/   # CREATE THIS - advanced features
 │   │   ├── pages/
-│   │   │   ├── Dashboard.tsx   # Has basic charts (enhance)
-│   │   │   ├── Usage.tsx       # Token usage page (enhance)
-│   │   │   └── Performance.tsx # Performance page (enhance)
+│   │   │   ├── Requests.tsx      # Add comparison mode
+│   │   │   ├── Conversations.tsx # Enhance thread view
+│   │   │   └── Settings.tsx      # Wire up settings
 │   │   └── lib/
-│   │       ├── types.ts    # TypeScript interfaces
-│   │       ├── api.ts      # React Query hooks (already has stats hooks)
-│   │       └── utils.ts
+│   │       ├── types.ts
+│   │       ├── api.ts
+│   │       └── storage.ts  # CREATE THIS - localStorage utils
 ├── web/                    # OLD dashboard (reference)
-│   └── app/components/
-│       └── UsageDashboard.tsx  # CRITICAL REFERENCE
+│   └── app/
+│       ├── routes/_index.tsx         # Compare mode logic
+│       └── components/
+│           ├── ConversationThread.tsx
+│           └── MessageFlow.tsx
 └── proxy/                  # Go backend
-    └── internal/
-        ├── handler/handlers.go  # Stats API handlers
-        └── model/models.go      # Data structures
 ```
 
-### Tech Stack
-- React 19.2.0
-- TypeScript 5.9.3
-- **Recharts 3.6.0** - Already installed, use this for all charts
-- Tailwind CSS 4.1.18
-- TanStack React Query 5.90.12
+### API Endpoints You'll Use
 
-### Existing Chart Infrastructure
-
-The dashboard already has these working:
-- `useWeeklyStats()` - Fetches 7-day aggregate data
-- `useHourlyStats()` - Fetches 24-hour breakdown
-- `useModelStats()` - Fetches per-model breakdown
-- `useProviderStats()` - Fetches per-provider breakdown
-- `usePerformanceStats()` - Fetches response time percentiles
-
----
-
-## API Endpoints You'll Use
-
-### GET /api/stats
-
-Returns weekly aggregate data.
-
-**Query Parameters:**
-- `start`: ISO 8601 UTC timestamp (week start)
-- `end`: ISO 8601 UTC timestamp (week end)
-
-**Response:**
 ```typescript
-interface DashboardStats {
-  dailyStats: DailyTokens[];
-}
+// Request Management
+DELETE /api/requests           // Clear all requests
+GET /api/requests/latest-date  // Get most recent request date
 
-interface DailyTokens {
-  date: string;           // "2024-12-24" (YYYY-MM-DD)
-  tokens: number;         // Total tokens (input + output)
-  requests: number;       // Request count
-  models: Record<string, ModelStats>;  // Per-model breakdown
-}
-
-interface ModelStats {
-  tokens: number;
-  requests: number;
-}
-```
-
-### GET /api/stats/hourly
-
-Returns hourly breakdown for a specific day.
-
-**Query Parameters:**
-- `start`: ISO 8601 UTC (day start)
-- `end`: ISO 8601 UTC (day end)
-
-**Response:**
-```typescript
-interface HourlyStatsResponse {
-  hourlyStats: HourlyTokens[];
-  todayTokens: number;      // Day total
-  todayRequests: number;
-  avgResponseTime: number;  // ms
-}
-
-interface HourlyTokens {
-  hour: number;           // 0-23 (UTC)
-  tokens: number;
-  requests: number;
-  models: Record<string, ModelStats>;
-}
-```
-
-### GET /api/stats/models
-
-Returns per-model breakdown for date range.
-
-**Response:**
-```typescript
-interface ModelStatsResponse {
-  modelStats: {
-    model: string;
-    tokens: number;
-    requests: number;
-  }[];
-}
-```
-
-### GET /api/stats/performance
-
-Returns response time percentiles.
-
-**Response:**
-```typescript
-interface PerformanceStatsResponse {
-  stats: PerformanceStats[];
-  startTime: string;
-  endTime: string;
-}
-
-interface PerformanceStats {
-  provider: string;
-  model: string;
-  avgResponseMs: number;
-  p50ResponseMs: number;  // Median
-  p95ResponseMs: number;  // 95th percentile
-  p99ResponseMs: number;  // 99th percentile
-  avgFirstByteMs: number; // Time to first token (streaming)
-  requestCount: number;
-}
+// Conversations
+GET /api/conversations         // List conversations
+GET /api/conversations/{id}    // Get single conversation with messages
+GET /api/conversations/project // Get all conversations for a project
 ```
 
 ---
 
-## Topic 1: Weekly Usage Chart
+## Topic 1: Request Comparison
 
 ### What You're Building
 
-A 7-day stacked bar chart showing token usage by model, similar to the old dashboard but with Recharts.
+A mode that allows users to select two requests and view them side-by-side, comparing:
+- Request parameters (model, tokens, timing)
+- Message content (what was sent)
+- Response content (what Claude returned)
+- Tool usage differences
 
-### Key Features
-1. Sunday-Saturday week boundaries
-2. Stacked bars colored by model (Opus=purple, Sonnet=blue, Haiku=green)
-3. Day name labels (Sun, Mon, Tue, etc.)
-4. Hover tooltips with model breakdown
-5. Y-axis with smart token formatting (K, M, B)
-6. Average line (dashed)
-7. Highlight "today" if visible
-8. Click-to-select day functionality
+### User Flow
 
-### WeeklyUsageChart.tsx
+1. User clicks "Compare" button in header → enters compare mode
+2. Checkboxes appear next to each request in the list
+3. User selects up to 2 requests
+4. Banner shows selected count with "Compare" button
+5. Click "Compare" → opens comparison modal
+6. Click "Cancel" or Escape → exits compare mode
+
+### Compare Mode State
 
 ```tsx
-// dashboard/src/components/charts/WeeklyUsageChart.tsx
-import { type FC, useMemo } from 'react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  ReferenceLine,
-  Cell,
-} from 'recharts';
-import { formatTokens, getModelColor, getModelDisplayName } from '@/lib/chartUtils';
-
-interface DailyTokens {
-  date: string;
-  tokens: number;
-  requests: number;
-  models: Record<string, { tokens: number; requests: number }>;
+// In Requests.tsx or a parent component
+interface CompareState {
+  enabled: boolean;
+  selectedIds: string[];  // Max 2
 }
 
-interface WeeklyUsageChartProps {
-  data: DailyTokens[];
-  selectedDate?: string;          // Currently selected date (YYYY-MM-DD)
-  onDateSelect?: (date: string) => void;
-  height?: number;
-}
+const [compareState, setCompareState] = useState<CompareState>({
+  enabled: false,
+  selectedIds: [],
+});
 
-// Day names in order (Sunday first)
-const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-// Model colors - consistent across all charts
-export const MODEL_COLORS: Record<string, string> = {
-  // Opus variants (purple)
-  'claude-3-opus-20240229': '#9333ea',
-  'claude-opus-4-20250514': '#9333ea',
-  opus: '#9333ea',
-
-  // Sonnet variants (blue)
-  'claude-3-sonnet-20240229': '#3b82f6',
-  'claude-3-5-sonnet-20240620': '#3b82f6',
-  'claude-3-5-sonnet-20241022': '#3b82f6',
-  'claude-sonnet-4-20250514': '#3b82f6',
-  sonnet: '#3b82f6',
-
-  // Haiku variants (green)
-  'claude-3-haiku-20240307': '#10b981',
-  'claude-3-5-haiku-20241022': '#10b981',
-  haiku: '#10b981',
-
-  // OpenAI (orange)
-  'gpt-4': '#f97316',
-  'gpt-4o': '#f97316',
-  'gpt-4-turbo': '#f97316',
-
-  // Default (gray)
-  default: '#6b7280',
+const toggleCompareMode = () => {
+  setCompareState(prev => ({
+    enabled: !prev.enabled,
+    selectedIds: [],
+  }));
 };
 
-export const WeeklyUsageChart: FC<WeeklyUsageChartProps> = ({
-  data,
-  selectedDate,
-  onDateSelect,
-  height = 300,
-}) => {
-  // Get all unique models across all days
-  const allModels = useMemo(() => {
-    const modelSet = new Set<string>();
-    data.forEach(day => {
-      Object.keys(day.models).forEach(model => modelSet.add(model));
-    });
-    return Array.from(modelSet).sort();
-  }, [data]);
-
-  // Transform data for Recharts (needs flat structure with model keys)
-  const chartData = useMemo(() => {
-    return data.map(day => {
-      const date = new Date(day.date + 'T00:00:00');
-      const dayName = DAY_NAMES[date.getDay()];
-      const isToday = day.date === getTodayDateString();
-      const isSelected = day.date === selectedDate;
-
-      const result: Record<string, unknown> = {
-        date: day.date,
-        dayName,
-        totalTokens: day.tokens,
-        totalRequests: day.requests,
-        isToday,
-        isSelected,
+const toggleRequestSelection = (id: string) => {
+  setCompareState(prev => {
+    if (prev.selectedIds.includes(id)) {
+      return {
+        ...prev,
+        selectedIds: prev.selectedIds.filter(x => x !== id),
       };
+    }
+    // Max 2 selected
+    if (prev.selectedIds.length >= 2) {
+      return {
+        ...prev,
+        selectedIds: [prev.selectedIds[1], id],  // Remove oldest, add new
+      };
+    }
+    return {
+      ...prev,
+      selectedIds: [...prev.selectedIds, id],
+    };
+  });
+};
+```
 
-      // Add each model's tokens as a separate key
-      allModels.forEach(model => {
-        result[model] = day.models[model]?.tokens || 0;
-      });
+### CompareModeBanner.tsx
 
-      return result;
-    });
-  }, [data, allModels, selectedDate]);
+```tsx
+// dashboard/src/components/features/CompareModeBanner.tsx
+import { type FC } from 'react';
+import { GitCompare, X } from 'lucide-react';
 
-  // Calculate average for reference line
-  const averageTokens = useMemo(() => {
-    const total = data.reduce((sum, day) => sum + day.tokens, 0);
-    return total / data.length;
-  }, [data]);
+interface CompareModeBannerProps {
+  selectedCount: number;
+  onCompare: () => void;
+  onCancel: () => void;
+}
 
-  // Calculate max for Y-axis
-  const maxTokens = useMemo(() => {
-    return Math.max(...data.map(d => d.tokens), 1);
-  }, [data]);
+export const CompareModeBanner: FC<CompareModeBannerProps> = ({
+  selectedCount,
+  onCompare,
+  onCancel,
+}) => {
+  return (
+    <div className="sticky top-0 z-40 bg-indigo-600 text-white px-4 py-2 flex items-center justify-between shadow-lg">
+      <div className="flex items-center gap-3">
+        <GitCompare className="w-5 h-5" />
+        <span className="font-medium">Compare Mode</span>
+        <span className="px-2 py-0.5 bg-white/20 rounded text-sm">
+          {selectedCount}/2 selected
+        </span>
+      </div>
 
-  // Custom tooltip
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (!active || !payload?.length) return null;
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onCompare}
+          disabled={selectedCount !== 2}
+          className="px-4 py-1.5 bg-white text-indigo-600 font-medium rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-indigo-50 transition-colors"
+        >
+          Compare Selected
+        </button>
+        <button
+          onClick={onCancel}
+          className="p-1.5 hover:bg-white/20 rounded-lg transition-colors"
+          title="Exit compare mode"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+    </div>
+  );
+};
+```
 
-    const dayData = chartData.find(d => d.dayName === label);
-    if (!dayData) return null;
+### RequestCompareModal.tsx
 
-    return (
-      <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
-        <div className="font-semibold text-gray-900 mb-2">
-          {label} - {dayData.date}
+```tsx
+// dashboard/src/components/features/RequestCompareModal.tsx
+import { type FC, useMemo } from 'react';
+import { X, ArrowRight, Clock, Zap, Hash } from 'lucide-react';
+import { MessageContent } from '../ui/MessageContent';
+import { formatTokens, formatDuration } from '@/lib/chartUtils';
+
+interface RequestLog {
+  request_id: string;
+  timestamp: string;
+  model: string;
+  routed_model?: string;
+  provider: string;
+  body: {
+    messages?: AnthropicMessage[];
+    max_tokens?: number;
+    temperature?: number;
+    system?: string | SystemMessage[];
+  };
+  response?: {
+    status_code: number;
+    response_time: number;
+    body?: {
+      content?: ContentBlock[];
+      usage?: {
+        input_tokens: number;
+        output_tokens: number;
+      };
+    };
+  };
+}
+
+interface RequestCompareModalProps {
+  request1: RequestLog;
+  request2: RequestLog;
+  onClose: () => void;
+}
+
+export const RequestCompareModal: FC<RequestCompareModalProps> = ({
+  request1,
+  request2,
+  onClose,
+}) => {
+  // Calculate differences
+  const diffs = useMemo(() => {
+    const r1 = request1;
+    const r2 = request2;
+
+    return {
+      model: r1.model !== r2.model,
+      provider: r1.provider !== r2.provider,
+      maxTokens: r1.body.max_tokens !== r2.body.max_tokens,
+      temperature: r1.body.temperature !== r2.body.temperature,
+      inputTokens: r1.response?.body?.usage?.input_tokens !== r2.response?.body?.usage?.input_tokens,
+      outputTokens: r1.response?.body?.usage?.output_tokens !== r2.response?.body?.usage?.output_tokens,
+      responseTime: Math.abs(
+        (r1.response?.response_time || 0) - (r2.response?.response_time || 0)
+      ) > 1000,  // > 1s difference
+    };
+  }, [request1, request2]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-black/60"
+        onClick={onClose}
+      />
+
+      {/* Modal */}
+      <div className="relative bg-white rounded-2xl shadow-2xl max-w-[95vw] max-h-[90vh] w-full mx-4 overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50">
+          <h2 className="text-lg font-semibold text-gray-900">Compare Requests</h2>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5 text-gray-500" />
+          </button>
         </div>
-        <div className="space-y-1">
-          {payload
-            .filter((p: any) => p.value > 0)
-            .sort((a: any, b: any) => b.value - a.value)
-            .map((p: any) => (
-              <div key={p.dataKey} className="flex items-center gap-2">
-                <div
-                  className="w-3 h-3 rounded"
-                  style={{ backgroundColor: p.fill }}
-                />
-                <span className="text-gray-600">{getModelDisplayName(p.dataKey)}:</span>
-                <span className="font-medium">{formatTokens(p.value)}</span>
-              </div>
-            ))}
-        </div>
-        <div className="mt-2 pt-2 border-t border-gray-100">
-          <div className="flex justify-between">
-            <span className="text-gray-500">Total:</span>
-            <span className="font-semibold">{formatTokens(dayData.totalTokens as number)}</span>
+
+        {/* Content */}
+        <div className="flex-1 overflow-auto">
+          {/* Stats Comparison */}
+          <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 border-b">
+            <StatsCard request={request1} label="Request 1" />
+            <StatsCard request={request2} label="Request 2" />
           </div>
-          <div className="flex justify-between text-gray-400">
-            <span>Requests:</span>
-            <span>{dayData.totalRequests}</span>
+
+          {/* Side-by-side Content */}
+          <div className="grid grid-cols-2 divide-x">
+            {/* Request 1 */}
+            <div className="p-4 space-y-4">
+              <SectionHeader title="Messages" requestId={request1.request_id} />
+              <RequestContent request={request1} />
+            </div>
+
+            {/* Request 2 */}
+            <div className="p-4 space-y-4">
+              <SectionHeader title="Messages" requestId={request2.request_id} />
+              <RequestContent request={request2} />
+            </div>
+          </div>
+
+          {/* Response Comparison */}
+          <div className="grid grid-cols-2 divide-x border-t">
+            <div className="p-4 space-y-4">
+              <SectionHeader title="Response" />
+              <ResponseContent response={request1.response} />
+            </div>
+            <div className="p-4 space-y-4">
+              <SectionHeader title="Response" />
+              <ResponseContent response={request2.response} />
+            </div>
           </div>
         </div>
       </div>
-    );
-  };
-
-  // Handle bar click
-  const handleBarClick = (data: any) => {
-    if (onDateSelect && data?.date) {
-      onDateSelect(data.date);
-    }
-  };
-
-  return (
-    <ResponsiveContainer width="100%" height={height}>
-      <BarChart
-        data={chartData}
-        margin={{ top: 20, right: 20, left: 20, bottom: 20 }}
-        onClick={(e) => e?.activePayload?.[0] && handleBarClick(e.activePayload[0].payload)}
-      >
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-
-        <XAxis
-          dataKey="dayName"
-          tick={{ fill: '#6b7280', fontSize: 12 }}
-          tickLine={false}
-          axisLine={{ stroke: '#e5e7eb' }}
-        />
-
-        <YAxis
-          tickFormatter={formatTokens}
-          tick={{ fill: '#6b7280', fontSize: 12 }}
-          tickLine={false}
-          axisLine={false}
-          domain={[0, maxTokens * 1.1]}
-        />
-
-        <Tooltip content={<CustomTooltip />} />
-
-        {/* Average line */}
-        <ReferenceLine
-          y={averageTokens}
-          stroke="#9ca3af"
-          strokeDasharray="5 5"
-          label={{
-            value: `Avg: ${formatTokens(averageTokens)}`,
-            position: 'right',
-            fill: '#9ca3af',
-            fontSize: 11,
-          }}
-        />
-
-        {/* Stacked bars for each model */}
-        {allModels.map((model, index) => (
-          <Bar
-            key={model}
-            dataKey={model}
-            stackId="tokens"
-            fill={getModelColor(model)}
-            radius={index === allModels.length - 1 ? [4, 4, 0, 0] : undefined}
-            cursor="pointer"
-          >
-            {/* Highlight selected/today bars */}
-            {chartData.map((entry, i) => (
-              <Cell
-                key={i}
-                opacity={entry.isSelected ? 1 : entry.isToday ? 0.9 : 0.8}
-                strokeWidth={entry.isSelected ? 2 : 0}
-                stroke={entry.isSelected ? '#1f2937' : undefined}
-              />
-            ))}
-          </Bar>
-        ))}
-
-        <Legend
-          formatter={(value) => getModelDisplayName(value)}
-          wrapperStyle={{ paddingTop: 10 }}
-        />
-      </BarChart>
-    </ResponsiveContainer>
+    </div>
   );
 };
 
-// Utility functions
-function getTodayDateString(): string {
-  return new Date().toISOString().split('T')[0];
-}
+// Stats card for quick comparison
+const StatsCard: FC<{ request: RequestLog; label: string }> = ({ request, label }) => {
+  const usage = request.response?.body?.usage;
 
-export function getModelColor(model: string): string {
-  // Check exact match first
-  if (MODEL_COLORS[model]) return MODEL_COLORS[model];
+  return (
+    <div className="bg-white rounded-lg p-4 border">
+      <div className="text-xs text-gray-500 mb-2">{label}</div>
+      <div className="grid grid-cols-4 gap-4 text-sm">
+        <div>
+          <div className="text-gray-500 text-xs">Model</div>
+          <div className="font-medium truncate" title={request.model}>
+            {getModelShortName(request.model)}
+          </div>
+        </div>
+        <div>
+          <div className="text-gray-500 text-xs">Response Time</div>
+          <div className="font-medium flex items-center gap-1">
+            <Clock className="w-3 h-3 text-gray-400" />
+            {formatDuration(request.response?.response_time || 0)}
+          </div>
+        </div>
+        <div>
+          <div className="text-gray-500 text-xs">Input Tokens</div>
+          <div className="font-medium flex items-center gap-1">
+            <Hash className="w-3 h-3 text-gray-400" />
+            {formatTokens(usage?.input_tokens || 0)}
+          </div>
+        </div>
+        <div>
+          <div className="text-gray-500 text-xs">Output Tokens</div>
+          <div className="font-medium flex items-center gap-1">
+            <Zap className="w-3 h-3 text-gray-400" />
+            {formatTokens(usage?.output_tokens || 0)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
-  // Check for partial matches
-  const lowerModel = model.toLowerCase();
-  if (lowerModel.includes('opus')) return MODEL_COLORS.opus;
-  if (lowerModel.includes('sonnet')) return MODEL_COLORS.sonnet;
-  if (lowerModel.includes('haiku')) return MODEL_COLORS.haiku;
-  if (lowerModel.includes('gpt')) return MODEL_COLORS['gpt-4'];
+const SectionHeader: FC<{ title: string; requestId?: string }> = ({ title, requestId }) => (
+  <div className="flex items-center justify-between">
+    <h3 className="font-medium text-gray-900">{title}</h3>
+    {requestId && (
+      <span className="text-xs font-mono text-gray-400">{requestId.slice(-8)}</span>
+    )}
+  </div>
+);
 
-  return MODEL_COLORS.default;
-}
+const RequestContent: FC<{ request: RequestLog }> = ({ request }) => {
+  const messages = request.body.messages || [];
 
-export function getModelDisplayName(model: string): string {
-  // Simplify long model names
+  return (
+    <div className="space-y-3 max-h-64 overflow-y-auto">
+      {messages.map((msg, i) => (
+        <div
+          key={i}
+          className={cn(
+            "p-3 rounded-lg border",
+            msg.role === 'user' ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'
+          )}
+        >
+          <div className="text-xs font-medium text-gray-500 mb-1">
+            {msg.role}
+          </div>
+          <MessageContent content={msg.content} />
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const ResponseContent: FC<{ response?: RequestLog['response'] }> = ({ response }) => {
+  if (!response?.body?.content) {
+    return <div className="text-gray-400 italic">No response</div>;
+  }
+
+  return (
+    <div className="max-h-64 overflow-y-auto">
+      <MessageContent content={response.body.content} />
+    </div>
+  );
+};
+
+function getModelShortName(model: string): string {
   if (model.includes('opus')) return 'Opus';
   if (model.includes('sonnet')) return 'Sonnet';
   if (model.includes('haiku')) return 'Haiku';
   if (model.includes('gpt-4o')) return 'GPT-4o';
   if (model.includes('gpt-4')) return 'GPT-4';
-
-  // Fallback: extract the key part
-  const parts = model.split('-');
-  if (parts.length > 2) {
-    return parts.slice(0, 2).join('-');
-  }
-  return model;
+  return model.split('-').slice(0, 2).join('-');
 }
 
-export function formatTokens(value: number): string {
-  if (value >= 1_000_000_000) {
-    return `${(value / 1_000_000_000).toFixed(1)}B`;
-  }
-  if (value >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(1)}M`;
-  }
-  if (value >= 1_000) {
-    return `${(value / 1_000).toFixed(1)}K`;
-  }
-  return value.toFixed(0);
+function cn(...classes: (string | boolean | undefined)[]): string {
+  return classes.filter(Boolean).join(' ');
 }
 ```
 
-### HourlyUsageChart.tsx
+---
+
+## Topic 2: Conversation Threads
+
+### What You're Building
+
+A full conversation thread view showing all messages between user and Claude, with:
+- User/Assistant message bubbles (different colors)
+- Tool calls displayed inline with their results
+- System messages (collapsible)
+- Timestamps for each message
+- Connection lines between related messages
+
+### API Response Structure
+
+```typescript
+interface ConversationDetail {
+  sessionId: string;
+  projectPath: string;
+  projectName: string;
+  messages: ConversationMessage[];
+  startTime: string;
+  endTime: string;
+  messageCount: number;
+}
+
+interface ConversationMessage {
+  parentUUID?: string;
+  isSidechain: boolean;
+  userType: string;
+  cwd: string;
+  sessionId: string;
+  version: string;
+  type: string;         // "user" | "assistant"
+  message: unknown;     // Raw message content
+  uuid: string;
+  timestamp: string;
+}
+```
+
+### ConversationThread.tsx
 
 ```tsx
-// dashboard/src/components/charts/HourlyUsageChart.tsx
-import { type FC, useMemo } from 'react';
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-} from 'recharts';
-import { formatTokens, getModelColor, getModelDisplayName } from './WeeklyUsageChart';
+// dashboard/src/components/features/ConversationThread.tsx
+import { type FC, useMemo, useState } from 'react';
+import { User, Bot, ChevronDown, Clock, GitBranch } from 'lucide-react';
+import { MessageContent } from '../ui/MessageContent';
+import { cn } from '@/lib/utils';
 
-interface HourlyTokens {
-  hour: number;
-  tokens: number;
-  requests: number;
-  models: Record<string, { tokens: number; requests: number }>;
+interface ConversationMessage {
+  parentUUID?: string;
+  isSidechain: boolean;
+  type: string;
+  message: unknown;
+  uuid: string;
+  timestamp: string;
+  cwd?: string;
 }
 
-interface HourlyUsageChartProps {
-  data: HourlyTokens[];
-  isToday?: boolean;
-  height?: number;
+interface ConversationThreadProps {
+  messages: ConversationMessage[];
+  startTime: string;
+  endTime: string;
 }
 
-// Hour labels
-const HOUR_LABELS: Record<number, string> = {
-  0: '12 AM',
-  6: '6 AM',
-  12: '12 PM',
-  18: '6 PM',
-};
-
-export const HourlyUsageChart: FC<HourlyUsageChartProps> = ({
-  data,
-  isToday = false,
-  height = 250,
+export const ConversationThread: FC<ConversationThreadProps> = ({
+  messages,
+  startTime,
+  endTime,
 }) => {
-  // Get all unique models
-  const allModels = useMemo(() => {
-    const modelSet = new Set<string>();
-    data.forEach(hour => {
-      Object.keys(hour.models).forEach(model => modelSet.add(model));
-    });
-    return Array.from(modelSet).sort();
-  }, [data]);
+  // Build message tree (handle parent/child relationships)
+  const messageTree = useMemo(() => {
+    return buildMessageTree(messages);
+  }, [messages]);
 
-  // Transform data - fill in missing hours
-  const chartData = useMemo(() => {
-    const fullDay = [];
-    for (let h = 0; h < 24; h++) {
-      const hourData = data.find(d => d.hour === h);
-      const result: Record<string, unknown> = {
-        hour: h,
-        hourLabel: HOUR_LABELS[h] || '',
-        totalTokens: hourData?.tokens || 0,
-        totalRequests: hourData?.requests || 0,
-      };
-
-      allModels.forEach(model => {
-        result[model] = hourData?.models[model]?.tokens || 0;
-      });
-
-      fullDay.push(result);
-    }
-    return fullDay;
-  }, [data, allModels]);
-
-  // Current hour for "now" indicator
-  const currentHour = new Date().getHours();
-
-  // Custom tooltip
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (!active || !payload?.length) return null;
-
-    const hourData = chartData.find(d => d.hour === label);
-    if (!hourData) return null;
-
-    const hourStr = formatHour(label);
-
-    return (
-      <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
-        <div className="font-semibold text-gray-900 mb-2">{hourStr}</div>
-        <div className="space-y-1">
-          {payload
-            .filter((p: any) => p.value > 0)
-            .map((p: any) => (
-              <div key={p.dataKey} className="flex items-center gap-2">
-                <div
-                  className="w-3 h-3 rounded"
-                  style={{ backgroundColor: p.fill }}
-                />
-                <span className="text-gray-600">{getModelDisplayName(p.dataKey)}:</span>
-                <span className="font-medium">{formatTokens(p.value)}</span>
-              </div>
-            ))}
-        </div>
-        <div className="mt-2 pt-2 border-t border-gray-100 text-gray-500">
-          {hourData.totalRequests} requests
-        </div>
-      </div>
-    );
-  };
+  // Count by role
+  const stats = useMemo(() => {
+    const user = messages.filter(m => m.type === 'user').length;
+    const assistant = messages.filter(m => m.type === 'assistant').length;
+    return { user, assistant, total: messages.length };
+  }, [messages]);
 
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
-        <defs>
-          {allModels.map(model => (
-            <linearGradient key={model} id={`gradient-${model}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={getModelColor(model)} stopOpacity={0.8} />
-              <stop offset="95%" stopColor={getModelColor(model)} stopOpacity={0.1} />
-            </linearGradient>
-          ))}
-        </defs>
+    <div className="flex flex-col h-full">
+      {/* Header with stats */}
+      <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
+        <div className="flex items-center gap-4 text-sm text-gray-600">
+          <span className="flex items-center gap-1">
+            <Clock className="w-4 h-4 text-gray-400" />
+            {formatTimeRange(startTime, endTime)}
+          </span>
+          <span>{stats.total} messages</span>
+        </div>
+        <div className="flex items-center gap-3 text-sm">
+          <span className="flex items-center gap-1 text-blue-600">
+            <User className="w-4 h-4" />
+            {stats.user}
+          </span>
+          <span className="flex items-center gap-1 text-green-600">
+            <Bot className="w-4 h-4" />
+            {stats.assistant}
+          </span>
+        </div>
+      </div>
 
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-
-        <XAxis
-          dataKey="hour"
-          tick={{ fill: '#6b7280', fontSize: 11 }}
-          tickFormatter={(h) => HOUR_LABELS[h] || ''}
-          ticks={[0, 6, 12, 18]}
-          tickLine={false}
-          axisLine={{ stroke: '#e5e7eb' }}
-        />
-
-        <YAxis
-          tickFormatter={formatTokens}
-          tick={{ fill: '#6b7280', fontSize: 11 }}
-          tickLine={false}
-          axisLine={false}
-          width={50}
-        />
-
-        <Tooltip content={<CustomTooltip />} />
-
-        {/* Current time indicator (only if viewing today) */}
-        {isToday && (
-          <ReferenceLine
-            x={currentHour}
-            stroke="#ef4444"
-            strokeWidth={2}
-            label={{
-              value: 'Now',
-              position: 'top',
-              fill: '#ef4444',
-              fontSize: 11,
-            }}
-          />
-        )}
-
-        {/* Stacked areas for each model */}
-        {allModels.map(model => (
-          <Area
-            key={model}
-            type="monotone"
-            dataKey={model}
-            stackId="tokens"
-            stroke={getModelColor(model)}
-            fill={`url(#gradient-${model})`}
-            strokeWidth={2}
+      {/* Message list */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messageTree.map((msg, index) => (
+          <MessageBubble
+            key={msg.uuid}
+            message={msg}
+            isFirst={index === 0}
+            isLast={index === messageTree.length - 1}
           />
         ))}
-      </AreaChart>
-    </ResponsiveContainer>
+      </div>
+    </div>
   );
 };
 
-function formatHour(hour: number): string {
-  if (hour === 0) return '12:00 AM';
-  if (hour === 12) return '12:00 PM';
-  if (hour < 12) return `${hour}:00 AM`;
-  return `${hour - 12}:00 PM`;
-}
-```
-
----
-
-## Topic 2: Model Breakdown Stats
-
-### ModelBreakdownChart.tsx
-
-```tsx
-// dashboard/src/components/charts/ModelBreakdownChart.tsx
-import { type FC, useMemo } from 'react';
-import {
-  PieChart,
-  Pie,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
-  Legend,
-} from 'recharts';
-import { formatTokens, getModelColor, getModelDisplayName } from './WeeklyUsageChart';
-
-interface ModelStat {
-  model: string;
-  tokens: number;
-  requests: number;
+// Individual message bubble
+interface MessageBubbleProps {
+  message: ConversationMessage & { children?: ConversationMessage[] };
+  isFirst: boolean;
+  isLast: boolean;
+  depth?: number;
 }
 
-interface ModelBreakdownChartProps {
-  data: ModelStat[];
-  metric?: 'tokens' | 'requests';
-  height?: number;
-}
-
-export const ModelBreakdownChart: FC<ModelBreakdownChartProps> = ({
-  data,
-  metric = 'tokens',
-  height = 300,
+const MessageBubble: FC<MessageBubbleProps> = ({
+  message,
+  isFirst,
+  isLast,
+  depth = 0,
 }) => {
-  // Sort by the selected metric (descending)
-  const sortedData = useMemo(() => {
-    return [...data]
-      .sort((a, b) => b[metric] - a[metric])
-      .map(item => ({
-        ...item,
-        displayName: getModelDisplayName(item.model),
-        color: getModelColor(item.model),
-        value: item[metric],
-      }));
-  }, [data, metric]);
+  const [expanded, setExpanded] = useState(true);
+  const isUser = message.type === 'user';
+  const isSystem = message.type === 'system';
 
-  // Calculate total
-  const total = useMemo(() => {
-    return sortedData.reduce((sum, item) => sum + item.value, 0);
-  }, [sortedData]);
+  // Extract content from message
+  const content = useMemo(() => {
+    return extractContent(message.message);
+  }, [message.message]);
 
-  // Custom tooltip
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (!active || !payload?.length) return null;
-    const item = payload[0].payload;
-    const percentage = ((item.value / total) * 100).toFixed(1);
-
-    return (
-      <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
-        <div className="flex items-center gap-2 mb-1">
-          <div
-            className="w-3 h-3 rounded"
-            style={{ backgroundColor: item.color }}
-          />
-          <span className="font-semibold">{item.displayName}</span>
-        </div>
-        <div className="text-gray-600">
-          {metric === 'tokens' ? formatTokens(item.value) : item.value.toLocaleString()} {metric}
-        </div>
-        <div className="text-gray-400">{percentage}% of total</div>
-      </div>
-    );
+  // Role-based styling
+  const bubbleStyles = {
+    user: 'bg-blue-50 border-blue-200 ml-8',
+    assistant: 'bg-gray-50 border-gray-200 mr-8',
+    system: 'bg-amber-50 border-amber-200 mx-4',
   };
 
-  // Custom legend with percentages
-  const renderLegend = (props: any) => {
-    const { payload } = props;
-    return (
-      <div className="flex flex-wrap justify-center gap-4 mt-4">
-        {payload.map((entry: any, index: number) => {
-          const item = sortedData[index];
-          const percentage = ((item.value / total) * 100).toFixed(1);
-          return (
-            <div key={entry.value} className="flex items-center gap-2 text-sm">
-              <div
-                className="w-3 h-3 rounded"
-                style={{ backgroundColor: entry.color }}
-              />
-              <span className="text-gray-600">{item.displayName}</span>
-              <span className="text-gray-400">({percentage}%)</span>
+  const avatarStyles = {
+    user: 'bg-blue-100 text-blue-600',
+    assistant: 'bg-green-100 text-green-600',
+    system: 'bg-amber-100 text-amber-600',
+  };
+
+  const roleType = isUser ? 'user' : isSystem ? 'system' : 'assistant';
+
+  return (
+    <div className={cn("relative", depth > 0 && "ml-8 border-l-2 border-gray-200 pl-4")}>
+      {/* Sidechain indicator */}
+      {message.isSidechain && (
+        <div className="absolute -left-3 top-4 bg-purple-100 text-purple-600 p-1 rounded-full">
+          <GitBranch className="w-3 h-3" />
+        </div>
+      )}
+
+      <div className={cn(
+        "rounded-xl border p-4",
+        bubbleStyles[roleType]
+      )}>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <div className={cn(
+              "w-7 h-7 rounded-full flex items-center justify-center",
+              avatarStyles[roleType]
+            )}>
+              {isUser ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
             </div>
-          );
-        })}
-      </div>
-    );
-  };
-
-  if (sortedData.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64 text-gray-400">
-        No data available
-      </div>
-    );
-  }
-
-  return (
-    <ResponsiveContainer width="100%" height={height}>
-      <PieChart>
-        <Pie
-          data={sortedData}
-          cx="50%"
-          cy="50%"
-          innerRadius={60}
-          outerRadius={100}
-          paddingAngle={2}
-          dataKey="value"
-          nameKey="displayName"
-        >
-          {sortedData.map((entry, index) => (
-            <Cell key={index} fill={entry.color} />
-          ))}
-        </Pie>
-        <Tooltip content={<CustomTooltip />} />
-        <Legend content={renderLegend} />
-
-        {/* Center text showing total */}
-        <text
-          x="50%"
-          y="50%"
-          textAnchor="middle"
-          dominantBaseline="middle"
-          className="fill-gray-900 text-lg font-semibold"
-        >
-          {metric === 'tokens' ? formatTokens(total) : total.toLocaleString()}
-        </text>
-        <text
-          x="50%"
-          y="50%"
-          dy={20}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          className="fill-gray-400 text-xs"
-        >
-          total {metric}
-        </text>
-      </PieChart>
-    </ResponsiveContainer>
-  );
-};
-```
-
-### ModelComparisonBar.tsx
-
-Horizontal bar chart for comparing models side-by-side.
-
-```tsx
-// dashboard/src/components/charts/ModelComparisonBar.tsx
-import { type FC, useMemo } from 'react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Cell,
-} from 'recharts';
-import { formatTokens, getModelColor, getModelDisplayName } from './WeeklyUsageChart';
-
-interface ModelStat {
-  model: string;
-  tokens: number;
-  requests: number;
-}
-
-interface ModelComparisonBarProps {
-  data: ModelStat[];
-  height?: number;
-}
-
-export const ModelComparisonBar: FC<ModelComparisonBarProps> = ({
-  data,
-  height = 250,
-}) => {
-  // Sort and enhance data
-  const chartData = useMemo(() => {
-    return [...data]
-      .sort((a, b) => b.tokens - a.tokens)
-      .map(item => ({
-        ...item,
-        displayName: getModelDisplayName(item.model),
-        color: getModelColor(item.model),
-        avgPerRequest: item.requests > 0 ? Math.round(item.tokens / item.requests) : 0,
-      }));
-  }, [data]);
-
-  // Custom tooltip
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (!active || !payload?.length) return null;
-    const item = payload[0].payload;
-
-    return (
-      <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
-        <div className="font-semibold text-gray-900 mb-2">{item.displayName}</div>
-        <div className="space-y-1">
-          <div className="flex justify-between gap-4">
-            <span className="text-gray-500">Tokens:</span>
-            <span className="font-medium">{formatTokens(item.tokens)}</span>
+            <span className="font-medium text-sm text-gray-700 capitalize">
+              {message.type}
+            </span>
+            <span className="text-xs text-gray-400">
+              {formatTimestamp(message.timestamp)}
+            </span>
           </div>
-          <div className="flex justify-between gap-4">
-            <span className="text-gray-500">Requests:</span>
-            <span className="font-medium">{item.requests.toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between gap-4">
-            <span className="text-gray-500">Avg/Request:</span>
-            <span className="font-medium">{formatTokens(item.avgPerRequest)}</span>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
-  return (
-    <ResponsiveContainer width="100%" height={height}>
-      <BarChart
-        data={chartData}
-        layout="vertical"
-        margin={{ top: 10, right: 30, left: 80, bottom: 10 }}
-      >
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" horizontal={false} />
-
-        <XAxis
-          type="number"
-          tickFormatter={formatTokens}
-          tick={{ fill: '#6b7280', fontSize: 11 }}
-          tickLine={false}
-          axisLine={{ stroke: '#e5e7eb' }}
-        />
-
-        <YAxis
-          type="category"
-          dataKey="displayName"
-          tick={{ fill: '#374151', fontSize: 12 }}
-          tickLine={false}
-          axisLine={false}
-          width={70}
-        />
-
-        <Tooltip content={<CustomTooltip />} />
-
-        <Bar dataKey="tokens" radius={[0, 4, 4, 0]}>
-          {chartData.map((entry, index) => (
-            <Cell key={index} fill={entry.color} />
-          ))}
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
-  );
-};
-```
-
----
-
-## Topic 3: Performance Metrics
-
-### PerformanceChart.tsx
-
-Multi-bar chart showing response time percentiles by model.
-
-```tsx
-// dashboard/src/components/charts/PerformanceChart.tsx
-import { type FC, useMemo } from 'react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts';
-import { getModelDisplayName } from './WeeklyUsageChart';
-
-interface PerformanceStats {
-  provider: string;
-  model: string;
-  avgResponseMs: number;
-  p50ResponseMs: number;
-  p95ResponseMs: number;
-  p99ResponseMs: number;
-  avgFirstByteMs: number;
-  requestCount: number;
-}
-
-interface PerformanceChartProps {
-  data: PerformanceStats[];
-  height?: number;
-}
-
-// Percentile colors
-const PERCENTILE_COLORS = {
-  p50: '#10b981',  // Green - median
-  p95: '#f59e0b',  // Amber - 95th
-  p99: '#ef4444',  // Red - 99th
-};
-
-export const PerformanceChart: FC<PerformanceChartProps> = ({
-  data,
-  height = 300,
-}) => {
-  // Transform data for display
-  const chartData = useMemo(() => {
-    return data
-      .filter(d => d.requestCount > 0)
-      .sort((a, b) => a.p50ResponseMs - b.p50ResponseMs)
-      .map(item => ({
-        ...item,
-        displayName: getModelDisplayName(item.model),
-        // Format for display
-        p50: item.p50ResponseMs,
-        p95: item.p95ResponseMs,
-        p99: item.p99ResponseMs,
-      }));
-  }, [data]);
-
-  // Custom tooltip
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (!active || !payload?.length) return null;
-
-    const item = chartData.find(d => d.displayName === label);
-    if (!item) return null;
-
-    return (
-      <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
-        <div className="font-semibold text-gray-900 mb-2">{label}</div>
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded" style={{ backgroundColor: PERCENTILE_COLORS.p50 }} />
-            <span className="text-gray-600">P50 (Median):</span>
-            <span className="font-medium">{formatDuration(item.p50ResponseMs)}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded" style={{ backgroundColor: PERCENTILE_COLORS.p95 }} />
-            <span className="text-gray-600">P95:</span>
-            <span className="font-medium">{formatDuration(item.p95ResponseMs)}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded" style={{ backgroundColor: PERCENTILE_COLORS.p99 }} />
-            <span className="text-gray-600">P99:</span>
-            <span className="font-medium">{formatDuration(item.p99ResponseMs)}</span>
-          </div>
-        </div>
-        <div className="mt-2 pt-2 border-t border-gray-100 text-gray-400">
-          <div>Avg: {formatDuration(item.avgResponseMs)}</div>
-          <div>TTFB: {formatDuration(item.avgFirstByteMs)}</div>
-          <div>{item.requestCount.toLocaleString()} requests</div>
-        </div>
-      </div>
-    );
-  };
-
-  if (chartData.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64 text-gray-400">
-        No performance data available
-      </div>
-    );
-  }
-
-  return (
-    <ResponsiveContainer width="100%" height={height}>
-      <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-
-        <XAxis
-          dataKey="displayName"
-          tick={{ fill: '#374151', fontSize: 12 }}
-          tickLine={false}
-          axisLine={{ stroke: '#e5e7eb' }}
-        />
-
-        <YAxis
-          tickFormatter={formatDuration}
-          tick={{ fill: '#6b7280', fontSize: 11 }}
-          tickLine={false}
-          axisLine={false}
-        />
-
-        <Tooltip content={<CustomTooltip />} />
-
-        <Legend
-          formatter={(value) => {
-            const labels: Record<string, string> = {
-              p50: 'P50 (Median)',
-              p95: 'P95',
-              p99: 'P99',
-            };
-            return labels[value] || value;
-          }}
-        />
-
-        <Bar dataKey="p50" fill={PERCENTILE_COLORS.p50} name="p50" radius={[4, 4, 0, 0]} />
-        <Bar dataKey="p95" fill={PERCENTILE_COLORS.p95} name="p95" radius={[4, 4, 0, 0]} />
-        <Bar dataKey="p99" fill={PERCENTILE_COLORS.p99} name="p99" radius={[4, 4, 0, 0]} />
-      </BarChart>
-    </ResponsiveContainer>
-  );
-};
-
-// Format milliseconds to human-readable
-function formatDuration(ms: number): string {
-  if (ms < 1000) {
-    return `${Math.round(ms)}ms`;
-  }
-  if (ms < 60000) {
-    return `${(ms / 1000).toFixed(1)}s`;
-  }
-  return `${(ms / 60000).toFixed(1)}m`;
-}
-```
-
-### LatencyDistributionChart.tsx
-
-Histogram showing response time distribution.
-
-```tsx
-// dashboard/src/components/charts/LatencyDistributionChart.tsx
-import { type FC, useMemo } from 'react';
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-} from 'recharts';
-
-interface LatencyDistributionProps {
-  responseTimes: number[];  // Array of response times in ms
-  height?: number;
-}
-
-export const LatencyDistributionChart: FC<LatencyDistributionProps> = ({
-  responseTimes,
-  height = 200,
-}) => {
-  // Create histogram buckets
-  const { buckets, stats } = useMemo(() => {
-    if (responseTimes.length === 0) {
-      return { buckets: [], stats: { p50: 0, p95: 0, p99: 0, avg: 0 } };
-    }
-
-    const sorted = [...responseTimes].sort((a, b) => a - b);
-    const min = sorted[0];
-    const max = sorted[sorted.length - 1];
-
-    // Calculate percentiles
-    const p50 = sorted[Math.floor(sorted.length * 0.5)];
-    const p95 = sorted[Math.floor(sorted.length * 0.95)];
-    const p99 = sorted[Math.floor(sorted.length * 0.99)];
-    const avg = sorted.reduce((a, b) => a + b, 0) / sorted.length;
-
-    // Create ~20 buckets
-    const bucketCount = Math.min(20, sorted.length);
-    const bucketSize = (max - min) / bucketCount || 1;
-
-    const bucketMap: Record<number, number> = {};
-    for (let i = 0; i < bucketCount; i++) {
-      const bucketStart = min + i * bucketSize;
-      bucketMap[bucketStart] = 0;
-    }
-
-    // Count values in each bucket
-    sorted.forEach(value => {
-      const bucket = Math.floor((value - min) / bucketSize) * bucketSize + min;
-      bucketMap[bucket] = (bucketMap[bucket] || 0) + 1;
-    });
-
-    const buckets = Object.entries(bucketMap)
-      .map(([start, count]) => ({
-        start: Number(start),
-        count,
-        percentage: (count / sorted.length) * 100,
-      }))
-      .sort((a, b) => a.start - b.start);
-
-    return { buckets, stats: { p50, p95, p99, avg } };
-  }, [responseTimes]);
-
-  if (buckets.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-32 text-gray-400">
-        No latency data
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <ResponsiveContainer width="100%" height={height}>
-        <AreaChart data={buckets} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
-          <defs>
-            <linearGradient id="latencyGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8} />
-              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1} />
-            </linearGradient>
-          </defs>
-
-          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
-
-          <XAxis
-            dataKey="start"
-            tickFormatter={(v) => `${Math.round(v)}ms`}
-            tick={{ fill: '#6b7280', fontSize: 10 }}
-            tickLine={false}
-            axisLine={{ stroke: '#e5e7eb' }}
-          />
-
-          <YAxis
-            tickFormatter={(v) => `${v.toFixed(0)}%`}
-            tick={{ fill: '#6b7280', fontSize: 10 }}
-            tickLine={false}
-            axisLine={false}
-            width={40}
-          />
-
-          <Tooltip
-            formatter={(value: number) => [`${value.toFixed(1)}%`, 'Requests']}
-            labelFormatter={(label) => `${Math.round(label)}ms`}
-          />
-
-          {/* Reference lines for percentiles */}
-          <ReferenceLine
-            x={stats.p50}
-            stroke="#10b981"
-            strokeDasharray="3 3"
-            label={{ value: 'P50', position: 'top', fontSize: 10, fill: '#10b981' }}
-          />
-          <ReferenceLine
-            x={stats.p95}
-            stroke="#f59e0b"
-            strokeDasharray="3 3"
-            label={{ value: 'P95', position: 'top', fontSize: 10, fill: '#f59e0b' }}
-          />
-
-          <Area
-            type="monotone"
-            dataKey="percentage"
-            stroke="#3b82f6"
-            fill="url(#latencyGradient)"
-            strokeWidth={2}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-
-      {/* Stats summary */}
-      <div className="flex justify-around text-center mt-2">
-        <StatBox label="Avg" value={`${Math.round(stats.avg)}ms`} />
-        <StatBox label="P50" value={`${Math.round(stats.p50)}ms`} color="green" />
-        <StatBox label="P95" value={`${Math.round(stats.p95)}ms`} color="amber" />
-        <StatBox label="P99" value={`${Math.round(stats.p99)}ms`} color="red" />
-      </div>
-    </div>
-  );
-};
-
-const StatBox: FC<{ label: string; value: string; color?: string }> = ({
-  label,
-  value,
-  color = 'gray',
-}) => {
-  const colorClasses: Record<string, string> = {
-    gray: 'text-gray-600',
-    green: 'text-green-600',
-    amber: 'text-amber-600',
-    red: 'text-red-600',
-  };
-
-  return (
-    <div>
-      <div className="text-xs text-gray-400">{label}</div>
-      <div className={`font-semibold ${colorClasses[color]}`}>{value}</div>
-    </div>
-  );
-};
-```
-
----
-
-## Quick Stats Cards
-
-Reusable stat card component for summary metrics.
-
-```tsx
-// dashboard/src/components/charts/StatCard.tsx
-import { type FC, type ReactNode } from 'react';
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
-import { cn } from '@/lib/utils';
-
-interface StatCardProps {
-  title: string;
-  value: string | number;
-  subtitle?: string;
-  icon?: ReactNode;
-  trend?: {
-    value: number;  // Percentage change
-    label?: string;
-  };
-  className?: string;
-}
-
-export const StatCard: FC<StatCardProps> = ({
-  title,
-  value,
-  subtitle,
-  icon,
-  trend,
-  className,
-}) => {
-  const getTrendIcon = () => {
-    if (!trend) return null;
-    if (trend.value > 0) return <TrendingUp className="w-4 h-4" />;
-    if (trend.value < 0) return <TrendingDown className="w-4 h-4" />;
-    return <Minus className="w-4 h-4" />;
-  };
-
-  const getTrendColor = () => {
-    if (!trend) return '';
-    if (trend.value > 0) return 'text-green-600';
-    if (trend.value < 0) return 'text-red-600';
-    return 'text-gray-400';
-  };
-
-  return (
-    <div className={cn(
-      "bg-white rounded-xl border border-gray-200 p-4 shadow-sm",
-      className
-    )}>
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="text-sm text-gray-500 font-medium">{title}</div>
-          <div className="text-2xl font-bold text-gray-900 mt-1">{value}</div>
-          {subtitle && (
-            <div className="text-xs text-gray-400 mt-1">{subtitle}</div>
+          {/* Collapse button for long content */}
+          {content.length > 500 && (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="p-1 hover:bg-white/50 rounded"
+            >
+              <ChevronDown className={cn(
+                "w-4 h-4 text-gray-400 transition-transform",
+                !expanded && "-rotate-90"
+              )} />
+            </button>
           )}
         </div>
-        {icon && (
-          <div className="p-2 bg-gray-50 rounded-lg text-gray-400">
-            {icon}
+
+        {/* Content */}
+        {expanded && (
+          <div className="prose prose-sm max-w-none">
+            <MessageContent content={content} showSystemReminders={isSystem} />
+          </div>
+        )}
+
+        {!expanded && (
+          <div className="text-sm text-gray-500 italic">
+            {content.length > 100 ? content.slice(0, 100) + '...' : content}
           </div>
         )}
       </div>
 
-      {trend && (
-        <div className={cn("flex items-center gap-1 mt-3 text-sm", getTrendColor())}>
-          {getTrendIcon()}
-          <span className="font-medium">
-            {trend.value > 0 ? '+' : ''}{trend.value.toFixed(1)}%
-          </span>
-          {trend.label && <span className="text-gray-400">{trend.label}</span>}
-        </div>
-      )}
+      {/* Child messages (for threaded replies) */}
+      {message.children?.map((child, i) => (
+        <MessageBubble
+          key={child.uuid}
+          message={child}
+          isFirst={false}
+          isLast={i === (message.children?.length || 0) - 1}
+          depth={depth + 1}
+        />
+      ))}
     </div>
   );
 };
+
+// Build tree from flat message list
+function buildMessageTree(messages: ConversationMessage[]): (ConversationMessage & { children?: ConversationMessage[] })[] {
+  const messageMap = new Map<string, ConversationMessage & { children?: ConversationMessage[] }>();
+  const roots: (ConversationMessage & { children?: ConversationMessage[] })[] = [];
+
+  // First pass: create map
+  messages.forEach(msg => {
+    messageMap.set(msg.uuid, { ...msg, children: [] });
+  });
+
+  // Second pass: build tree
+  messages.forEach(msg => {
+    const node = messageMap.get(msg.uuid)!;
+    if (msg.parentUUID && messageMap.has(msg.parentUUID)) {
+      const parent = messageMap.get(msg.parentUUID)!;
+      parent.children = parent.children || [];
+      parent.children.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
+
+  // Sort by timestamp
+  roots.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+  return roots;
+}
+
+// Extract content from various message formats
+function extractContent(message: unknown): string | ContentBlock[] {
+  if (!message) return '';
+
+  // Handle different message structures
+  if (typeof message === 'string') return message;
+
+  if (typeof message === 'object') {
+    const msg = message as Record<string, unknown>;
+
+    // Direct content field
+    if (msg.content) {
+      if (typeof msg.content === 'string') return msg.content;
+      if (Array.isArray(msg.content)) return msg.content;
+    }
+
+    // Wrapped in message object
+    if (msg.message && typeof msg.message === 'object') {
+      return extractContent(msg.message);
+    }
+
+    // Text field
+    if (msg.text && typeof msg.text === 'string') return msg.text;
+  }
+
+  // Fallback: stringify
+  return JSON.stringify(message, null, 2);
+}
+
+function formatTimestamp(timestamp: string): string {
+  const date = new Date(timestamp);
+  return date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+function formatTimeRange(start: string, end: string): string {
+  const startDate = new Date(start);
+  const endDate = new Date(end);
+  const durationMs = endDate.getTime() - startDate.getTime();
+  const durationMins = Math.round(durationMs / 60000);
+
+  if (durationMins < 60) {
+    return `${durationMins}m`;
+  }
+  return `${Math.round(durationMins / 60)}h ${durationMins % 60}m`;
+}
+```
+
+### ConversationList.tsx
+
+```tsx
+// dashboard/src/components/features/ConversationList.tsx
+import { type FC } from 'react';
+import { MessageSquare, Clock, FolderOpen } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+interface Conversation {
+  id: string;
+  requestCount: number;
+  startTime: string;
+  lastActivity: string;
+  duration: number;
+  firstMessage: string;
+  projectName: string;
+}
+
+interface ConversationListProps {
+  conversations: Conversation[];
+  selectedId?: string;
+  onSelect: (id: string) => void;
+  loading?: boolean;
+}
+
+export const ConversationList: FC<ConversationListProps> = ({
+  conversations,
+  selectedId,
+  onSelect,
+  loading,
+}) => {
+  if (loading) {
+    return (
+      <div className="p-4 space-y-3">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="animate-pulse">
+            <div className="h-20 bg-gray-100 rounded-lg" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (conversations.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+        <MessageSquare className="w-12 h-12 mb-3 opacity-50" />
+        <p>No conversations found</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="divide-y">
+      {conversations.map(conv => (
+        <ConversationItem
+          key={conv.id}
+          conversation={conv}
+          isSelected={conv.id === selectedId}
+          onClick={() => onSelect(conv.id)}
+        />
+      ))}
+    </div>
+  );
+};
+
+const ConversationItem: FC<{
+  conversation: Conversation;
+  isSelected: boolean;
+  onClick: () => void;
+}> = ({ conversation, isSelected, onClick }) => {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "w-full text-left p-4 hover:bg-gray-50 transition-colors",
+        isSelected && "bg-blue-50 border-l-4 border-blue-500"
+      )}
+    >
+      {/* Project name */}
+      <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
+        <FolderOpen className="w-3.5 h-3.5" />
+        <span className="truncate">{conversation.projectName}</span>
+      </div>
+
+      {/* First message preview */}
+      <div className="text-sm text-gray-900 line-clamp-2 mb-2">
+        {conversation.firstMessage || 'No message preview'}
+      </div>
+
+      {/* Stats */}
+      <div className="flex items-center gap-3 text-xs text-gray-400">
+        <span className="flex items-center gap-1">
+          <MessageSquare className="w-3 h-3" />
+          {conversation.requestCount} messages
+        </span>
+        <span className="flex items-center gap-1">
+          <Clock className="w-3 h-3" />
+          {formatDuration(conversation.duration)}
+        </span>
+        <span>{formatRelativeTime(conversation.lastActivity)}</span>
+      </div>
+    </button>
+  );
+};
+
+function formatDuration(ms: number): string {
+  const mins = Math.round(ms / 60000);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  return `${hours}h ${mins % 60}m`;
+}
+
+function formatRelativeTime(timestamp: string): string {
+  const now = Date.now();
+  const then = new Date(timestamp).getTime();
+  const diffMins = Math.round((now - then) / 60000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffMins < 1440) return `${Math.floor(diffMins / 60)}h ago`;
+  return `${Math.floor(diffMins / 1440)}d ago`;
+}
 ```
 
 ---
 
-## Date Navigation Component
+## Topic 3: Data Management
 
-For navigating between dates/weeks.
+### What You're Building
+
+1. **Refresh Button** - Manual data refresh
+2. **Clear All Data** - Delete request history with confirmation
+3. **Settings Persistence** - Save preferences to localStorage
+4. **Auto-Refresh** - Optional automatic data polling
+
+### Local Storage Utilities
 
 ```tsx
-// dashboard/src/components/charts/DateNavigation.tsx
-import { type FC } from 'react';
-import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
-import { cn } from '@/lib/utils';
+// dashboard/src/lib/storage.ts
 
-interface DateNavigationProps {
-  selectedDate: Date;
-  onDateChange: (date: Date) => void;
-  mode?: 'day' | 'week';
-  disableForward?: boolean;  // Disable going past today
+const STORAGE_PREFIX = 'claude-proxy-dashboard:';
+
+export interface DashboardSettings {
+  autoRefreshEnabled: boolean;
+  autoRefreshInterval: number;  // seconds
+  defaultModelFilter: string;
+  darkMode: boolean;
+  notifyOnError: boolean;
+  notifyOnHighLatency: boolean;
+  highLatencyThreshold: number;  // ms
+  dataRetentionDays: number;
 }
 
-export const DateNavigation: FC<DateNavigationProps> = ({
-  selectedDate,
-  onDateChange,
-  mode = 'day',
-  disableForward = true,
-}) => {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+const DEFAULT_SETTINGS: DashboardSettings = {
+  autoRefreshEnabled: false,
+  autoRefreshInterval: 30,
+  defaultModelFilter: 'all',
+  darkMode: false,
+  notifyOnError: true,
+  notifyOnHighLatency: false,
+  highLatencyThreshold: 5000,
+  dataRetentionDays: 30,
+};
 
-  const isAtToday = selectedDate >= today;
-
-  const goBack = () => {
-    const newDate = new Date(selectedDate);
-    if (mode === 'week') {
-      newDate.setDate(newDate.getDate() - 7);
-    } else {
-      newDate.setDate(newDate.getDate() - 1);
+export function getSettings(): DashboardSettings {
+  try {
+    const stored = localStorage.getItem(STORAGE_PREFIX + 'settings');
+    if (stored) {
+      return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
     }
-    onDateChange(newDate);
-  };
+  } catch (e) {
+    console.error('Failed to load settings:', e);
+  }
+  return DEFAULT_SETTINGS;
+}
 
-  const goForward = () => {
-    if (disableForward && isAtToday) return;
+export function saveSettings(settings: Partial<DashboardSettings>): void {
+  try {
+    const current = getSettings();
+    const updated = { ...current, ...settings };
+    localStorage.setItem(STORAGE_PREFIX + 'settings', JSON.stringify(updated));
+  } catch (e) {
+    console.error('Failed to save settings:', e);
+  }
+}
 
-    const newDate = new Date(selectedDate);
-    if (mode === 'week') {
-      newDate.setDate(newDate.getDate() + 7);
-    } else {
-      newDate.setDate(newDate.getDate() + 1);
-    }
-    onDateChange(newDate);
-  };
+export function getLastSelectedDate(): string | null {
+  return localStorage.getItem(STORAGE_PREFIX + 'selectedDate');
+}
 
-  const goToToday = () => {
-    onDateChange(new Date());
-  };
+export function saveSelectedDate(date: string): void {
+  localStorage.setItem(STORAGE_PREFIX + 'selectedDate', date);
+}
 
-  const formatDate = (date: Date): string => {
-    if (mode === 'week') {
-      const start = getWeekStart(date);
-      const end = new Date(start);
-      end.setDate(end.getDate() + 6);
-      return `${formatShortDate(start)} - ${formatShortDate(end)}`;
-    }
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
+export function clearAllStorage(): void {
+  Object.keys(localStorage)
+    .filter(key => key.startsWith(STORAGE_PREFIX))
+    .forEach(key => localStorage.removeItem(key));
+}
+```
+
+### Settings Hook
+
+```tsx
+// dashboard/src/lib/hooks/useSettings.ts
+import { useState, useEffect, useCallback } from 'react';
+import { getSettings, saveSettings, type DashboardSettings } from '../storage';
+
+export function useSettings() {
+  const [settings, setSettingsState] = useState<DashboardSettings>(getSettings);
+
+  // Sync with localStorage on mount
+  useEffect(() => {
+    setSettingsState(getSettings());
+  }, []);
+
+  const updateSettings = useCallback((updates: Partial<DashboardSettings>) => {
+    setSettingsState(prev => {
+      const updated = { ...prev, ...updates };
+      saveSettings(updated);
+      return updated;
     });
+  }, []);
+
+  const resetSettings = useCallback(() => {
+    const defaults = getSettings();  // Will return defaults
+    localStorage.removeItem('claude-proxy-dashboard:settings');
+    setSettingsState(defaults);
+  }, []);
+
+  return {
+    settings,
+    updateSettings,
+    resetSettings,
+  };
+}
+```
+
+### Auto-Refresh Hook
+
+```tsx
+// dashboard/src/lib/hooks/useAutoRefresh.ts
+import { useEffect, useRef, useCallback } from 'react';
+import { useSettings } from './useSettings';
+
+interface UseAutoRefreshOptions {
+  onRefresh: () => void | Promise<void>;
+  enabled?: boolean;  // Override settings
+}
+
+export function useAutoRefresh({ onRefresh, enabled }: UseAutoRefreshOptions) {
+  const { settings } = useSettings();
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastRefreshRef = useRef<number>(Date.now());
+
+  const isEnabled = enabled ?? settings.autoRefreshEnabled;
+  const intervalMs = settings.autoRefreshInterval * 1000;
+
+  const refresh = useCallback(async () => {
+    lastRefreshRef.current = Date.now();
+    await onRefresh();
+  }, [onRefresh]);
+
+  // Set up interval
+  useEffect(() => {
+    if (!isEnabled) {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      return;
+    }
+
+    intervalRef.current = setInterval(refresh, intervalMs);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, [isEnabled, intervalMs, refresh]);
+
+  // Manual refresh trigger
+  const triggerRefresh = useCallback(() => {
+    refresh();
+  }, [refresh]);
+
+  return {
+    triggerRefresh,
+    lastRefresh: lastRefreshRef.current,
+    isAutoRefreshEnabled: isEnabled,
+  };
+}
+```
+
+### DataManagementBar.tsx
+
+```tsx
+// dashboard/src/components/features/DataManagementBar.tsx
+import { type FC, useState } from 'react';
+import { RefreshCw, Trash2, Settings, Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+interface DataManagementBarProps {
+  onRefresh: () => Promise<void>;
+  onClearData: () => Promise<void>;
+  isRefreshing?: boolean;
+  lastRefresh?: Date;
+}
+
+export const DataManagementBar: FC<DataManagementBarProps> = ({
+  onRefresh,
+  onClearData,
+  isRefreshing,
+  lastRefresh,
+}) => {
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
+
+  const handleClear = async () => {
+    setIsClearing(true);
+    try {
+      await onClearData();
+      setShowClearConfirm(false);
+    } finally {
+      setIsClearing(false);
+    }
   };
 
   return (
     <div className="flex items-center gap-2">
+      {/* Refresh button */}
       <button
-        onClick={goBack}
-        className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-        title={mode === 'week' ? 'Previous week' : 'Previous day'}
-      >
-        <ChevronLeft className="w-5 h-5 text-gray-600" />
-      </button>
-
-      <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg min-w-[180px] justify-center">
-        <Calendar className="w-4 h-4 text-gray-400" />
-        <span className="text-sm font-medium text-gray-700">
-          {formatDate(selectedDate)}
-        </span>
-      </div>
-
-      <button
-        onClick={goForward}
-        disabled={disableForward && isAtToday}
+        onClick={onRefresh}
+        disabled={isRefreshing}
         className={cn(
-          "p-2 rounded-lg transition-colors",
-          disableForward && isAtToday
-            ? "text-gray-300 cursor-not-allowed"
-            : "hover:bg-gray-100 text-gray-600"
+          "flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-colors",
+          "bg-gray-100 hover:bg-gray-200 text-gray-700",
+          isRefreshing && "opacity-50 cursor-not-allowed"
         )}
-        title={mode === 'week' ? 'Next week' : 'Next day'}
+        title={lastRefresh ? `Last refresh: ${lastRefresh.toLocaleTimeString()}` : 'Refresh data'}
       >
-        <ChevronRight className="w-5 h-5" />
+        <RefreshCw className={cn("w-4 h-4", isRefreshing && "animate-spin")} />
+        Refresh
       </button>
 
-      {!isAtToday && (
+      {/* Clear data button */}
+      <div className="relative">
         <button
-          onClick={goToToday}
-          className="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+          onClick={() => setShowClearConfirm(true)}
+          className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition-colors"
         >
-          Today
+          <Trash2 className="w-4 h-4" />
+          Clear Data
         </button>
-      )}
+
+        {/* Confirmation popover */}
+        {showClearConfirm && (
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setShowClearConfirm(false)}
+            />
+            <div className="absolute top-full mt-2 right-0 z-50 bg-white rounded-lg shadow-lg border p-4 w-64">
+              <div className="text-sm font-medium text-gray-900 mb-2">
+                Clear all request data?
+              </div>
+              <div className="text-xs text-gray-500 mb-4">
+                This will permanently delete all logged requests. This action cannot be undone.
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowClearConfirm(false)}
+                  className="flex-1 px-3 py-1.5 text-sm rounded bg-gray-100 hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleClear}
+                  disabled={isClearing}
+                  className="flex-1 px-3 py-1.5 text-sm rounded bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+                >
+                  {isClearing ? (
+                    <Loader2 className="w-4 h-4 mx-auto animate-spin" />
+                  ) : (
+                    'Delete All'
+                  )}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 };
-
-function getWeekStart(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay();
-  d.setDate(d.getDate() - day);  // Go to Sunday
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function formatShortDate(date: Date): string {
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
 ```
 
----
-
-## Integration with Existing Pages
-
-### Update Dashboard.tsx
+### Enhanced Settings.tsx
 
 ```tsx
-// Replace existing charts with your new components:
+// dashboard/src/pages/Settings.tsx
+import { type FC } from 'react';
+import { Save, RotateCcw, Bell, Clock, Database } from 'lucide-react';
+import { PageHeader, PageContent } from '@/components/layout';
+import { useSettings } from '@/lib/hooks/useSettings';
 
-import { WeeklyUsageChart } from '@/components/charts/WeeklyUsageChart';
-import { HourlyUsageChart } from '@/components/charts/HourlyUsageChart';
-import { ModelBreakdownChart } from '@/components/charts/ModelBreakdownChart';
-import { StatCard } from '@/components/charts/StatCard';
-import { DateNavigation } from '@/components/charts/DateNavigation';
+export const Settings: FC = () => {
+  const { settings, updateSettings, resetSettings } = useSettings();
 
-// In the component:
-<DateNavigation
-  selectedDate={selectedDate}
-  onDateChange={setSelectedDate}
-  mode="day"
-/>
+  return (
+    <>
+      <PageHeader
+        title="Settings"
+        description="Configure dashboard preferences"
+        actions={
+          <button
+            onClick={resetSettings}
+            className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
+          >
+            <RotateCcw className="w-4 h-4" />
+            Reset to Defaults
+          </button>
+        }
+      />
 
-<WeeklyUsageChart
-  data={weeklyStats.dailyStats}
-  selectedDate={formatDateString(selectedDate)}
-  onDateSelect={(date) => setSelectedDate(new Date(date))}
-/>
+      <PageContent>
+        <div className="max-w-2xl space-y-8">
+          {/* Auto-Refresh Section */}
+          <SettingsSection
+            icon={Clock}
+            title="Auto-Refresh"
+            description="Automatically refresh data at regular intervals"
+          >
+            <ToggleSetting
+              label="Enable auto-refresh"
+              checked={settings.autoRefreshEnabled}
+              onChange={(checked) => updateSettings({ autoRefreshEnabled: checked })}
+            />
+            <SelectSetting
+              label="Refresh interval"
+              value={String(settings.autoRefreshInterval)}
+              options={[
+                { value: '15', label: '15 seconds' },
+                { value: '30', label: '30 seconds' },
+                { value: '60', label: '1 minute' },
+                { value: '300', label: '5 minutes' },
+              ]}
+              onChange={(value) => updateSettings({ autoRefreshInterval: Number(value) })}
+              disabled={!settings.autoRefreshEnabled}
+            />
+          </SettingsSection>
 
-<HourlyUsageChart
-  data={hourlyStats.hourlyStats}
-  isToday={isToday(selectedDate)}
-/>
-```
+          {/* Notifications Section */}
+          <SettingsSection
+            icon={Bell}
+            title="Notifications"
+            description="Get alerted about important events"
+          >
+            <ToggleSetting
+              label="Error notifications"
+              description="Show notification when a request fails"
+              checked={settings.notifyOnError}
+              onChange={(checked) => updateSettings({ notifyOnError: checked })}
+            />
+            <ToggleSetting
+              label="High latency warnings"
+              description="Alert when response time exceeds threshold"
+              checked={settings.notifyOnHighLatency}
+              onChange={(checked) => updateSettings({ notifyOnHighLatency: checked })}
+            />
+            <NumberSetting
+              label="Latency threshold"
+              value={settings.highLatencyThreshold}
+              onChange={(value) => updateSettings({ highLatencyThreshold: value })}
+              suffix="ms"
+              min={1000}
+              max={30000}
+              step={1000}
+              disabled={!settings.notifyOnHighLatency}
+            />
+          </SettingsSection>
 
----
+          {/* Data Management Section */}
+          <SettingsSection
+            icon={Database}
+            title="Data Retention"
+            description="Control how long data is stored"
+          >
+            <SelectSetting
+              label="Keep request logs for"
+              value={String(settings.dataRetentionDays)}
+              options={[
+                { value: '7', label: '7 days' },
+                { value: '14', label: '14 days' },
+                { value: '30', label: '30 days' },
+                { value: '90', label: '90 days' },
+                { value: '0', label: 'Forever' },
+              ]}
+              onChange={(value) => updateSettings({ dataRetentionDays: Number(value) })}
+            />
+            <div className="text-xs text-gray-400 mt-2">
+              Note: Data retention is applied server-side. Changes take effect on next cleanup cycle.
+            </div>
+          </SettingsSection>
+        </div>
+      </PageContent>
+    </>
+  );
+};
 
-## Utility Functions
+// Helper components
+const SettingsSection: FC<{
+  icon: FC<{ className?: string }>;
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}> = ({ icon: Icon, title, description, children }) => (
+  <div className="bg-white rounded-xl border p-6">
+    <div className="flex items-start gap-3 mb-4">
+      <div className="p-2 bg-gray-100 rounded-lg">
+        <Icon className="w-5 h-5 text-gray-600" />
+      </div>
+      <div>
+        <h3 className="font-medium text-gray-900">{title}</h3>
+        <p className="text-sm text-gray-500">{description}</p>
+      </div>
+    </div>
+    <div className="space-y-4 ml-12">{children}</div>
+  </div>
+);
 
-Create a central file for chart utilities:
+const ToggleSetting: FC<{
+  label: string;
+  description?: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  disabled?: boolean;
+}> = ({ label, description, checked, onChange, disabled }) => (
+  <label className={cn("flex items-start gap-3 cursor-pointer", disabled && "opacity-50 cursor-not-allowed")}>
+    <input
+      type="checkbox"
+      checked={checked}
+      onChange={(e) => onChange(e.target.checked)}
+      disabled={disabled}
+      className="mt-1 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+    />
+    <div>
+      <div className="text-sm font-medium text-gray-700">{label}</div>
+      {description && <div className="text-xs text-gray-400">{description}</div>}
+    </div>
+  </label>
+);
 
-```tsx
-// dashboard/src/lib/chartUtils.ts
-export { formatTokens, getModelColor, getModelDisplayName } from '@/components/charts/WeeklyUsageChart';
+const SelectSetting: FC<{
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}> = ({ label, value, options, onChange, disabled }) => (
+  <div className={cn("flex items-center justify-between", disabled && "opacity-50")}>
+    <span className="text-sm text-gray-700">{label}</span>
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={disabled}
+      className="px-3 py-1.5 text-sm border rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+    >
+      {options.map(opt => (
+        <option key={opt.value} value={opt.value}>{opt.label}</option>
+      ))}
+    </select>
+  </div>
+);
 
-export function formatDuration(ms: number): string {
-  if (ms < 1000) return `${Math.round(ms)}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${(ms / 60000).toFixed(1)}m`;
-}
+const NumberSetting: FC<{
+  label: string;
+  value: number;
+  onChange: (value: number) => void;
+  suffix?: string;
+  min?: number;
+  max?: number;
+  step?: number;
+  disabled?: boolean;
+}> = ({ label, value, onChange, suffix, min, max, step, disabled }) => (
+  <div className={cn("flex items-center justify-between", disabled && "opacity-50")}>
+    <span className="text-sm text-gray-700">{label}</span>
+    <div className="flex items-center gap-2">
+      <input
+        type="number"
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        min={min}
+        max={max}
+        step={step}
+        disabled={disabled}
+        className="w-24 px-3 py-1.5 text-sm border rounded-lg text-right focus:ring-2 focus:ring-blue-500"
+      />
+      {suffix && <span className="text-sm text-gray-400">{suffix}</span>}
+    </div>
+  </div>
+);
 
-export function getWeekBoundaries(date: Date): { start: Date; end: Date } {
-  const start = new Date(date);
-  start.setDate(start.getDate() - start.getDay());  // Sunday
-  start.setHours(0, 0, 0, 0);
-
-  const end = new Date(start);
-  end.setDate(end.getDate() + 6);  // Saturday
-  end.setHours(23, 59, 59, 999);
-
-  return { start, end };
-}
-
-export function getDayBoundaries(date: Date): { start: Date; end: Date } {
-  const start = new Date(date);
-  start.setHours(0, 0, 0, 0);
-
-  const end = new Date(date);
-  end.setHours(23, 59, 59, 999);
-
-  return { start, end };
-}
-
-export function toISODateString(date: Date): string {
-  return date.toISOString().split('T')[0];
-}
-
-export function isToday(date: Date): boolean {
-  const today = new Date();
-  return toISODateString(date) === toISODateString(today);
+function cn(...classes: (string | boolean | undefined)[]): string {
+  return classes.filter(Boolean).join(' ');
 }
 ```
 
@@ -1525,83 +1319,77 @@ export function isToday(date: Date): boolean {
 
 ## Testing Checklist
 
-### Weekly Usage Chart
-- [ ] Shows 7 days (Sunday-Saturday)
-- [ ] Stacked bars by model with correct colors
-- [ ] Day name labels on X-axis
-- [ ] Token values on Y-axis with K/M/B formatting
-- [ ] Tooltip shows model breakdown
-- [ ] Average reference line displayed
-- [ ] "Today" highlighted if in view
-- [ ] Click on bar selects that date
-- [ ] Empty days show empty bar
+### Request Comparison
+- [ ] Compare mode toggle shows banner
+- [ ] Checkboxes appear on each request
+- [ ] Can select up to 2 requests
+- [ ] Selecting 3rd replaces oldest
+- [ ] Compare button disabled until 2 selected
+- [ ] Modal shows side-by-side comparison
+- [ ] Stats differences highlighted
+- [ ] Messages displayed correctly
+- [ ] Responses displayed correctly
+- [ ] Escape key closes modal
+- [ ] Cancel button exits compare mode
 
-### Hourly Usage Chart
-- [ ] Shows 24 hours
-- [ ] Stacked areas by model
-- [ ] Hour labels at 12AM, 6AM, 12PM, 6PM
-- [ ] "Now" indicator when viewing today
-- [ ] Tooltip shows model breakdown
-- [ ] Fills missing hours with zero
+### Conversation Threads
+- [ ] Conversation list shows all conversations
+- [ ] Selected conversation highlighted
+- [ ] Message bubbles show correct colors (user/assistant)
+- [ ] System messages collapsible
+- [ ] Sidechain messages indicated
+- [ ] Timestamps displayed
+- [ ] Parent/child relationships shown
+- [ ] Long messages truncated with expand
+- [ ] Empty conversations handled
 
-### Model Breakdown Charts
-- [ ] Pie chart shows token distribution
-- [ ] Center displays total
-- [ ] Legend shows percentages
-- [ ] Bar chart sorted by tokens (descending)
-- [ ] Correct colors per model
-- [ ] Tooltip shows tokens, requests, avg/request
-
-### Performance Charts
-- [ ] Multi-bar shows P50, P95, P99
-- [ ] Colors distinguish percentiles (green/amber/red)
-- [ ] Tooltip shows all stats including TTFB
-- [ ] Distribution histogram if data available
-- [ ] Stats summary below chart
-
-### Date Navigation
-- [ ] Prev/Next buttons work
-- [ ] Can't go past today (by default)
-- [ ] "Today" button appears when not at today
-- [ ] Week mode shows date range
+### Data Management
+- [ ] Refresh button triggers data reload
+- [ ] Refresh shows loading state
+- [ ] Clear data shows confirmation
+- [ ] Clear data actually deletes (API call)
+- [ ] Settings persist to localStorage
+- [ ] Settings load on page refresh
+- [ ] Reset button restores defaults
+- [ ] Auto-refresh works when enabled
+- [ ] Auto-refresh stops when disabled
 
 ---
 
 ## Common Gotchas
 
-1. **Timezone Handling**: All API dates are UTC. Convert to local for display, back to UTC for API calls.
-2. **Sunday-Saturday Weeks**: Not Monday-Sunday. Use `date.getDay()` (Sunday = 0).
-3. **Empty Data**: Always handle empty arrays gracefully - show "No data" message.
-4. **Token Formatting**: Use consistent formatting (K, M, B) everywhere.
-5. **Memoization**: Charts re-render expensively. Use `useMemo` for data transformations.
-6. **Responsive Design**: All charts must work on different screen sizes. Use `ResponsiveContainer`.
-7. **Color Consistency**: Model colors must be identical across all charts.
+1. **Compare Mode State**: Keep in parent component (Requests.tsx), not in list item
+2. **Message Trees**: Handle orphaned messages (parentUUID points to non-existent message)
+3. **localStorage Errors**: Wrap in try/catch (can fail in incognito mode)
+4. **Auto-refresh Memory Leaks**: Clear intervals on unmount
+5. **Modal Focus Trap**: Trap focus inside modal for accessibility
+6. **Large Conversations**: Virtual scrolling may be needed for 100+ messages
 
 ---
 
 ## Reference Files
 
 Study these in the old dashboard:
-- `web/app/components/UsageDashboard.tsx` - Complete reference (450+ lines)
-- `web/app/routes/_index.tsx` - Date navigation, stats loading patterns
+- `web/app/routes/_index.tsx` - Compare mode implementation
+- `web/app/components/ConversationThread.tsx` - Thread display
+- `web/app/components/MessageFlow.tsx` - Message bubbles
 
 ---
 
 ## Definition of Done
 
-Phase 4 is complete when:
+Phase 5 is complete when:
 
-1. Weekly usage chart with model breakdown works
-2. Hourly usage chart with "now" indicator works
-3. Model breakdown pie and bar charts work
-4. Performance percentile charts work
-5. Date navigation works (day and week modes)
-6. Stat cards display summary metrics
-7. All charts use consistent colors and formatting
-8. Charts are responsive and performant
-9. No TypeScript errors in strict mode
-10. Commit history shows logical, atomic commits
+1. Request comparison works with side-by-side view
+2. Conversation threads display with proper bubbles
+3. Settings persist to localStorage
+4. Refresh button works
+5. Clear data works with confirmation
+6. Auto-refresh works when enabled
+7. All components handle edge cases gracefully
+8. No TypeScript errors in strict mode
+9. Commit history shows logical, atomic commits
 
 ---
 
-**Make the data beautiful. Users love charts that tell a story.**
+**You're building the power features. Make advanced users happy.**
