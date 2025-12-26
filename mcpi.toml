@@ -1,0 +1,2 @@
+[servers."chromedevtools/chrome-devtools-mcp"]
+args = [ "-y", "chrome-devtools-mcp@latest",]
