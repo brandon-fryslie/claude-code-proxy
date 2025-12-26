@@ -42,7 +42,7 @@ export function DashboardPage() {
   const { data: hourlyStats, isLoading: isLoadingHourly } = useHourlyStats(dateRange)
   const { data: providerStats, isLoading: isLoadingProviders } = useProviderStats(dateRange)
 
-  const providerChartData = providerStats?.providers.map(p => ({
+  const providerChartData = providerStats?.providers?.map(p => ({
     name: p.provider,
     tokens: p.totalTokens,
     requests: p.requests,
@@ -52,7 +52,7 @@ export function DashboardPage() {
   const todayRequests = hourlyStats?.todayRequests || 0
   const todayTokens = hourlyStats?.todayTokens || 0
   const avgResponseTime = hourlyStats?.avgResponseTime || 0
-  const activeProviders = providerStats?.providers.length || 0
+  const activeProviders = providerStats?.providers?.length || 0
 
   return (
     <>
@@ -87,7 +87,7 @@ export function DashboardPage() {
           <StatCard
             label="Active Providers"
             value={activeProviders.toString()}
-            subValue={providerStats?.providers.map(p => p.provider).join(', ') || 'None'}
+            subValue={providerStats?.providers?.map(p => p.provider).join(', ') || 'None'}
             icon={<Zap size={20} />}
             isLoading={isLoadingProviders}
           />

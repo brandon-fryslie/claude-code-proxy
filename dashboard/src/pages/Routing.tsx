@@ -54,10 +54,10 @@ export function RoutingPage() {
   const dateRange = getTodayDateRange()
   const { data: subagentStats, isLoading } = useSubagentStats(dateRange)
 
-  const totalRouted = subagentStats?.subagents.reduce((acc, s) => acc + s.requests, 0) || 0
-  const totalTokens = subagentStats?.subagents.reduce((acc, s) => acc + s.totalTokens, 0) || 0
+  const totalRouted = subagentStats?.subagents?.reduce((acc, s) => acc + s.requests, 0) || 0
+  const totalTokens = subagentStats?.subagents?.reduce((acc, s) => acc + s.totalTokens, 0) || 0
   const avgLatency =
-    subagentStats && subagentStats.subagents.length > 0
+    subagentStats && subagentStats.subagents && subagentStats.subagents.length > 0
       ? Math.round(
           subagentStats.subagents.reduce((acc, s) => acc + s.avgResponseMs * s.requests, 0) /
             totalRouted
@@ -81,7 +81,7 @@ export function RoutingPage() {
             <div className="flex items-center justify-center h-32 text-[var(--color-text-muted)]">
               Loading routing data...
             </div>
-          ) : !subagentStats || subagentStats.subagents.length === 0 ? (
+          ) : !subagentStats || !subagentStats.subagents || subagentStats.subagents.length === 0 ? (
             <div className="flex items-center justify-center h-32 text-[var(--color-text-muted)]">
               <div className="text-center">
                 <p>No subagent routing configured</p>

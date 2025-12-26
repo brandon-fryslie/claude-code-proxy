@@ -62,7 +62,10 @@ export function useRequestsSummary(params?: GetRequestsParams) {
   const queryString = buildQueryString(params || {})
   return useQuery({
     queryKey: ['requests', 'summary', params],
-    queryFn: () => fetchAPI<RequestSummary[]>(`/requests/summary${queryString}`),
+    queryFn: async () => {
+      const response = await fetchAPI<{ requests: RequestSummary[] }>(`/requests/summary${queryString}`)
+      return response.requests || []
+    },
   })
 }
 
@@ -169,7 +172,10 @@ export function usePerformanceStats(params?: StatsParams) {
 export function useConversations() {
   return useQuery({
     queryKey: ['conversations'],
-    queryFn: () => fetchAPI<Conversation[]>('/conversations'),
+    queryFn: async () => {
+      const response = await fetchAPI<{ conversations: Conversation[] }>('/conversations')
+      return response.conversations || []
+    },
   })
 }
 

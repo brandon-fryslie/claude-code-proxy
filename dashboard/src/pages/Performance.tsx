@@ -8,7 +8,7 @@ export function PerformancePage() {
   const { data: perfStats, isLoading } = usePerformanceStats(dateRange)
 
   // Calculate overall stats
-  const overallStats = perfStats?.stats.reduce(
+  const overallStats = perfStats?.stats?.reduce(
     (acc, stat) => ({
       avgResponseMs: acc.avgResponseMs + stat.avgResponseMs * stat.requestCount,
       p50ResponseMs: acc.p50ResponseMs + stat.p50ResponseMs * stat.requestCount,
@@ -96,7 +96,7 @@ export function PerformancePage() {
         </div>
 
         {/* Detailed Stats Table */}
-        {perfStats && perfStats.stats.length > 0 && (
+        {perfStats && perfStats.stats && perfStats.stats.length > 0 && (
           <div className="p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
             <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-4">Detailed Statistics</h3>
             <div className="overflow-x-auto">

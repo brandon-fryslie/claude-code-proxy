@@ -37,14 +37,43 @@ if [ ! -f .env ]; then
     fi
 fi
 
+# Create temp directory for logs
+LOGDIR=$(mktemp -d)
+trap "rm -rf $LOGDIR" EXIT
+
 # Function to cleanup on exit
 cleanup() {
     echo -e "\n${YELLOW}Shutting down services...${NC}"
     kill $PROXY_PID $WEB_PID $DASHBOARD_PID 2>/dev/null || true
+    rm -rf "$LOGDIR"
     exit
 }
 
 trap cleanup EXIT INT TERM
+
+# Function to extract URL from Vite output
+wait_for_vite_url() {
+    local logfile="$1"
+    local service_name="$2"
+    local max_wait=30
+    local waited=0
+
+    while [ $waited -lt $max_wait ]; do
+        if [ -f "$logfile" ]; then
+            # Look for the Local URL line
+            local url=$(grep -o 'Local:   http://[^[:space:]]*' "$logfile" 2>/dev/null | sed 's/Local:   //' | head -1)
+            if [ -n "$url" ]; then
+                echo "$url"
+                return 0
+            fi
+        fi
+        sleep 0.5
+        waited=$((waited + 1))
+    done
+
+    echo "http://localhost:????"
+    return 1
+}
 
 # Build and start proxy server
 echo -e "\n${BLUE}Building proxy server...${NC}"
@@ -74,35 +103,44 @@ if [ ! -d "dashboard/node_modules" ]; then
 fi
 
 # Start proxy server
-echo -e "\n${BLUE}Starting proxy server on port 3001...${NC}"
-./bin/proxy &
+echo -e "\n${BLUE}Starting proxy server...${NC}"
+./bin/proxy > "$LOGDIR/proxy.log" 2>&1 &
 PROXY_PID=$!
 
 # Wait for proxy to start
 sleep 2
 
 # Start legacy web server
-echo -e "${BLUE}Starting web interface on port 5173...${NC}"
+echo -e "${BLUE}Starting web interface...${NC}"
 cd web
-pnpm run dev &
+pnpm run dev > "$LOGDIR/web.log" 2>&1 &
 WEB_PID=$!
 cd ..
 
 # Start new dashboard
-echo -e "${BLUE}Starting new dashboard on port 5174...${NC}"
+echo -e "${BLUE}Starting new dashboard...${NC}"
 cd dashboard
-pnpm run dev &
+pnpm run dev > "$LOGDIR/dashboard.log" 2>&1 &
 DASHBOARD_PID=$!
 cd ..
 
+# Wait for Vite servers to be ready and extract URLs
+echo -e "${BLUE}Waiting for services to be ready...${NC}"
+WEB_URL=$(wait_for_vite_url "$LOGDIR/web.log" "web")
+DASHBOARD_URL=$(wait_for_vite_url "$LOGDIR/dashboard.log" "dashboard")
+
 echo -e "\n${GREEN}All services started!${NC}"
 echo "========================================="
-echo -e "Web Dashboard:  ${BLUE}http://localhost:5173${NC}"
-echo -e "New Dashboard:  ${BLUE}http://localhost:5174${NC}"
+echo -e "Web Dashboard:  ${BLUE}${WEB_URL}${NC}"
+echo -e "New Dashboard:  ${BLUE}${DASHBOARD_URL}${NC}"
 echo -e "API Proxy:      ${BLUE}http://localhost:3001${NC}"
 echo -e "Health Check:   ${BLUE}http://localhost:3001/health${NC}"
 echo "========================================="
 echo -e "${YELLOW}Press Ctrl+C to stop all services${NC}\n"
 
+# Tail the logs so user can see output
+tail -f "$LOGDIR/proxy.log" "$LOGDIR/web.log" "$LOGDIR/dashboard.log" &
+TAIL_PID=$!
+
 # Wait for processes
-wait
+wait $PROXY_PID $WEB_PID $DASHBOARD_PID

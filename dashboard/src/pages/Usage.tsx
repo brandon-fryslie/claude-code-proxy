@@ -13,15 +13,15 @@ export function UsagePage() {
   const { data: weeklyStats, isLoading: isLoadingWeekly } = useWeeklyStats()
 
   // Calculate today's tokens
-  const todayTokens = modelStats?.modelStats.reduce((acc, m) => acc + m.tokens, 0) || 0
+  const todayTokens = modelStats?.modelStats?.reduce((acc, m) => acc + m.tokens, 0) || 0
 
   // Calculate week tokens (last 7 days)
   const weekTokens =
-    weeklyStats?.dailyStats.slice(-7).reduce((acc, day) => acc + day.tokens, 0) || 0
+    weeklyStats?.dailyStats?.slice(-7).reduce((acc, day) => acc + day.tokens, 0) || 0
 
   // Calculate month tokens (last 30 days)
   const monthTokens =
-    weeklyStats?.dailyStats.slice(-30).reduce((acc, day) => acc + day.tokens, 0) || 0
+    weeklyStats?.dailyStats?.slice(-30).reduce((acc, day) => acc + day.tokens, 0) || 0
 
   return (
     <>
@@ -139,7 +139,7 @@ export function UsagePage() {
         </div>
 
         {/* Model Stats Table */}
-        {modelStats && modelStats.modelStats.length > 0 && (
+        {modelStats && modelStats.modelStats && modelStats.modelStats.length > 0 && (
           <div className="p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
             <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-4">
               Detailed Breakdown (Today)
