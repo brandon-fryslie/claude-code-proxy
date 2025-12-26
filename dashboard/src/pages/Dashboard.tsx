@@ -1,7 +1,8 @@
 import { PageHeader, PageContent } from '@/components/layout'
 import { Activity, BarChart3, Clock, Zap } from 'lucide-react'
 import { useHourlyStats, useProviderStats, getTodayDateRange, formatDuration, formatTokens } from '@/lib/api'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import { HourlyUsageChart } from '@/components/charts'
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 
 interface StatCardProps {
   label: string
@@ -40,13 +41,6 @@ export function DashboardPage() {
   const dateRange = getTodayDateRange()
   const { data: hourlyStats, isLoading: isLoadingHourly } = useHourlyStats(dateRange)
   const { data: providerStats, isLoading: isLoadingProviders } = useProviderStats(dateRange)
-
-  // Prepare chart data
-  const hourlyChartData = hourlyStats?.hourlyStats.map(h => ({
-    hour: `${h.hour}:00`,
-    requests: h.requests,
-    tokens: h.tokens,
-  })) || []
 
   const providerChartData = providerStats?.providers.map(p => ({
     name: p.provider,
@@ -101,47 +95,33 @@ export function DashboardPage() {
 
         {/* Charts */}
         <div className="grid grid-cols-2 gap-4">
-          {/* Request Volume Chart */}
-          <div className="p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)] h-80">
-            <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-4">Request Volume Today</h3>
+          {/* Hourly Usage Chart with Model Breakdown */}
+          <div className="p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
+            <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-4">
+              Hourly Usage (Today)
+            </h3>
             {isLoadingHourly ? (
               <div className="flex items-center justify-center h-64 text-[var(--color-text-muted)]">
                 Loading...
               </div>
-            ) : hourlyChartData.length === 0 ? (
+            ) : !hourlyStats?.hourlyStats || hourlyStats.hourlyStats.length === 0 ? (
               <div className="flex items-center justify-center h-64 text-[var(--color-text-muted)]">
                 No data available
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height="85%">
-                <BarChart data={hourlyChartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-                  <XAxis
-                    dataKey="hour"
-                    stroke="var(--color-text-muted)"
-                    style={{ fontSize: '12px' }}
-                  />
-                  <YAxis
-                    stroke="var(--color-text-muted)"
-                    style={{ fontSize: '12px' }}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'var(--color-bg-tertiary)',
-                      border: '1px solid var(--color-border)',
-                      borderRadius: '6px',
-                      color: 'var(--color-text-primary)',
-                    }}
-                  />
-                  <Bar dataKey="requests" fill="#8b5cf6" />
-                </BarChart>
-              </ResponsiveContainer>
+              <HourlyUsageChart
+                data={hourlyStats.hourlyStats}
+                isToday={true}
+                height={280}
+              />
             )}
           </div>
 
           {/* Token Usage by Provider Chart */}
-          <div className="p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)] h-80">
-            <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-4">Token Usage by Provider</h3>
+          <div className="p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
+            <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-4">
+              Token Usage by Provider
+            </h3>
             {isLoadingProviders ? (
               <div className="flex items-center justify-center h-64 text-[var(--color-text-muted)]">
                 Loading...
