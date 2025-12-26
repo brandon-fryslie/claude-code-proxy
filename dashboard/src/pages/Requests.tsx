@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { PageHeader } from '@/components/layout'
 import { ResizablePanel, PanelGroup, Panel } from '@/components/layout'
 import { cn } from '@/lib/utils'
-import { ChevronRight, Clock, ArrowRight, Filter, Search } from 'lucide-react'
+import { ChevronRight, Clock, ArrowRight, Filter, Search, User, Bot, ChevronDown } from 'lucide-react'
 import { useRequestsSummary, useRequestDetail, formatDuration } from '@/lib/api'
-import type { RequestSummary as RequestSummaryType } from '@/lib/types'
+import { MessageContent } from '@/components/ui'
+import type { RequestSummary as RequestSummaryType, AnthropicMessage } from '@/lib/types'
 
 function RequestListItem({
   request,
@@ -67,6 +68,142 @@ function RequestListItem({
   )
 }
 
+// Message bubble component for chat-style display
+function MessageBubble({ message }: { message: AnthropicMessage }) {
+  const [expanded, setExpanded] = useState(false)
+  const isUser = message.role === 'user'
+  const isAssistant = message.role === 'assistant'
+
+  // Get content preview
+  const content = message.content
+  const hasMultipleBlocks = Array.isArray(content) && content.length > 1
+  const firstBlock = Array.isArray(content) ? content[0] : content
+
+  // Check if this is a tool result message
+  const isToolResult = Array.isArray(content) && content.some(
+    (block): block is { type: string } =>
+      block && typeof block === 'object' && 'type' in block && block.type === 'tool_result'
+  )
+
+  return (
+    <div className={cn(
+      'rounded-lg border overflow-hidden',
+      isUser && 'bg-blue-50/50 border-blue-200',
+      isAssistant && 'bg-gray-50 border-gray-200',
+      !isUser && !isAssistant && 'bg-amber-50/50 border-amber-200'
+    )}>
+      {/* Header */}
+      <div
+        className={cn(
+          'flex items-center gap-2 px-3 py-2 cursor-pointer',
+          isUser && 'bg-blue-100/50',
+          isAssistant && 'bg-gray-100',
+          !isUser && !isAssistant && 'bg-amber-100/50'
+        )}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className={cn(
+          'w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0',
+          isUser && 'bg-blue-500 text-white',
+          isAssistant && 'bg-gray-700 text-white',
+          !isUser && !isAssistant && 'bg-amber-500 text-white'
+        )}>
+          {isUser ? <User size={14} /> : <Bot size={14} />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <span className={cn(
+            'text-sm font-medium capitalize',
+            isUser && 'text-blue-800',
+            isAssistant && 'text-gray-800',
+            !isUser && !isAssistant && 'text-amber-800'
+          )}>
+            {message.role}
+          </span>
+          {hasMultipleBlocks && (
+            <span className="ml-2 text-xs text-gray-500">
+              ({(content as unknown[]).length} blocks)
+            </span>
+          )}
+          {isToolResult && (
+            <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">
+              tool result
+            </span>
+          )}
+        </div>
+        <ChevronDown
+          size={16}
+          className={cn(
+            'text-gray-400 transition-transform',
+            expanded && 'rotate-180'
+          )}
+        />
+      </div>
+
+      {/* Content */}
+      {expanded && (
+        <div className="p-3">
+          <MessageContent content={content} />
+        </div>
+      )}
+
+      {/* Preview when collapsed */}
+      {!expanded && (
+        <div className="px-3 py-2 text-sm text-gray-600 truncate">
+          {typeof firstBlock === 'string'
+            ? firstBlock.substring(0, 100) + (firstBlock.length > 100 ? '...' : '')
+            : firstBlock && typeof firstBlock === 'object' && 'type' in firstBlock
+              ? `[${firstBlock.type}]`
+              : '[content]'
+          }
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Response content display
+function ResponseContent({ response }: { response: { body?: unknown; bodyText?: string } }) {
+  const [expanded, setExpanded] = useState(true)
+
+  const body = response.body
+  const content = body && typeof body === 'object' && 'content' in body
+    ? (body as { content: unknown }).content
+    : null
+
+  return (
+    <div className="rounded-lg border border-green-200 bg-green-50/50 overflow-hidden">
+      <div
+        className="flex items-center gap-2 px-3 py-2 bg-green-100/50 cursor-pointer"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="w-6 h-6 rounded-full bg-green-600 text-white flex items-center justify-center flex-shrink-0">
+          <Bot size={14} />
+        </div>
+        <span className="text-sm font-medium text-green-800">Response</span>
+        <ChevronDown
+          size={16}
+          className={cn(
+            'ml-auto text-gray-400 transition-transform',
+            expanded && 'rotate-180'
+          )}
+        />
+      </div>
+
+      {expanded && (
+        <div className="p-3">
+          {content ? (
+            <MessageContent content={content} />
+          ) : (
+            <pre className="text-xs font-mono bg-white rounded p-3 border border-green-200 overflow-auto max-h-96">
+              {JSON.stringify(body || response.bodyText, null, 2)}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function RequestDetail({ requestId }: { requestId: string | null }) {
   const { data: request, isLoading } = useRequestDetail(requestId)
 
@@ -95,9 +232,11 @@ function RequestDetail({ requestId }: { requestId: string | null }) {
   }
 
   const status = request.response?.statusCode && request.response.statusCode >= 200 && request.response.statusCode < 300 ? 'success' : 'error'
+  const messages = request.body?.messages || []
 
   return (
     <div className="p-4 h-full overflow-auto">
+      {/* Header */}
       <div className="flex items-center gap-2 mb-4">
         <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
           Request Details
@@ -113,6 +252,7 @@ function RequestDetail({ requestId }: { requestId: string | null }) {
         </span>
       </div>
 
+      {/* Metadata grid */}
       <div className="grid grid-cols-2 gap-4 mb-6">
         <div className="p-3 rounded bg-[var(--color-bg-tertiary)]">
           <p className="text-xs text-[var(--color-text-muted)] mb-1">Model</p>
@@ -150,19 +290,25 @@ function RequestDetail({ requestId }: { requestId: string | null }) {
         )}
       </div>
 
+      {/* Messages */}
       <div className="space-y-4">
-        <div>
-          <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-2">Request</h3>
-          <div className="p-3 rounded bg-[var(--color-bg-tertiary)] font-mono text-xs text-[var(--color-text-secondary)] overflow-auto max-h-96">
-            <pre>{JSON.stringify(request.body, null, 2)}</pre>
-          </div>
+        <h3 className="text-sm font-medium text-[var(--color-text-primary)]">
+          Messages ({messages.length})
+        </h3>
+
+        <div className="space-y-3">
+          {messages.map((message, index) => (
+            <MessageBubble key={index} message={message} />
+          ))}
         </div>
+
+        {/* Response */}
         {request.response && (
-          <div>
-            <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-2">Response</h3>
-            <div className="p-3 rounded bg-[var(--color-bg-tertiary)] font-mono text-xs text-[var(--color-text-secondary)] overflow-auto max-h-96">
-              <pre>{JSON.stringify(request.response.body || request.response.bodyText, null, 2)}</pre>
-            </div>
+          <div className="mt-6">
+            <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-3">
+              Response
+            </h3>
+            <ResponseContent response={request.response} />
           </div>
         )}
       </div>
