@@ -13,8 +13,8 @@ import type {
   ConversationDetail,
 } from './types'
 
-// Base API URL - proxy is configured in vite.config.ts
-const API_BASE = '/api'
+// Use V2 API for cleaner responses
+const API_BASE = '/api/v2'
 
 // Generic fetch wrapper with error handling
 async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
@@ -58,17 +58,16 @@ interface GetRequestsParams {
   limit?: number
 }
 
+// V2 API returns array directly
 export function useRequestsSummary(params?: GetRequestsParams) {
   const queryString = buildQueryString(params || {})
   return useQuery({
     queryKey: ['requests', 'summary', params],
-    queryFn: async () => {
-      const response = await fetchAPI<{ requests: RequestSummary[] }>(`/requests/summary${queryString}`)
-      return response.requests || []
-    },
+    queryFn: () => fetchAPI<RequestSummary[]>(`/requests/summary${queryString}`),
   })
 }
 
+// V2 API returns request directly (not wrapped)
 export function useRequestDetail(id: string | null) {
   return useQuery({
     queryKey: ['requests', 'detail', id],
@@ -81,8 +80,13 @@ export function useLatestRequestDate() {
   return useQuery({
     queryKey: ['requests', 'latest-date'],
     queryFn: async () => {
-      const response = await fetchAPI<{ date: string }>('/requests/latest-date')
-      return response.date
+      // This endpoint doesn't have a v2 version yet, use v1
+      const response = await fetch('/api/requests/latest-date', {
+        headers: { 'Content-Type': 'application/json' },
+      })
+      if (!response.ok) throw new Error('Failed to get latest date')
+      const data = await response.json()
+      return data.date
     },
   })
 }
@@ -92,7 +96,7 @@ export function useLatestRequestDate() {
 // ============================================================================
 
 export async function clearAllRequests(): Promise<void> {
-  await fetch(`${API_BASE}/requests`, {
+  await fetch('/api/requests', {
     method: 'DELETE',
     headers: {
       'Content-Type': 'application/json',
@@ -109,6 +113,7 @@ interface StatsParams {
   end?: string
 }
 
+// V2 API ensures arrays are never null
 export function useWeeklyStats(params?: StatsParams) {
   const queryString = buildQueryString(params || {})
   return useQuery({
@@ -169,16 +174,15 @@ export function usePerformanceStats(params?: StatsParams) {
 // Conversation Queries
 // ============================================================================
 
+// V2 API returns array directly
 export function useConversations() {
   return useQuery({
     queryKey: ['conversations'],
-    queryFn: async () => {
-      const response = await fetchAPI<{ conversations: Conversation[] }>('/conversations')
-      return response.conversations || []
-    },
+    queryFn: () => fetchAPI<Conversation[]>('/conversations'),
   })
 }
 
+// V2 API returns conversation directly (no project param needed)
 export function useConversationDetail(id: string | null) {
   return useQuery({
     queryKey: ['conversations', 'detail', id],

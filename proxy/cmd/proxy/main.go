@@ -91,6 +91,18 @@ func main() {
 	r.HandleFunc("/api/conversations/{id}", h.GetConversationByID).Methods("GET")
 	r.HandleFunc("/api/conversations/project", h.GetConversationsByProject).Methods("GET")
 
+	// V2 API - cleaner response format for new dashboard
+	r.HandleFunc("/api/v2/requests/summary", h.GetRequestsSummaryV2).Methods("GET")
+	r.HandleFunc("/api/v2/requests/{id}", h.GetRequestByIDV2).Methods("GET")
+	r.HandleFunc("/api/v2/conversations", h.GetConversationsV2).Methods("GET")
+	r.HandleFunc("/api/v2/conversations/{id}", h.GetConversationByIDV2).Methods("GET")
+	r.HandleFunc("/api/v2/stats", h.GetWeeklyStatsV2).Methods("GET")
+	r.HandleFunc("/api/v2/stats/hourly", h.GetHourlyStatsV2).Methods("GET")
+	r.HandleFunc("/api/v2/stats/models", h.GetModelStatsV2).Methods("GET")
+	r.HandleFunc("/api/v2/stats/providers", h.GetProviderStatsV2).Methods("GET")
+	r.HandleFunc("/api/v2/stats/subagents", h.GetSubagentStatsV2).Methods("GET")
+	r.HandleFunc("/api/v2/stats/performance", h.GetPerformanceStatsV2).Methods("GET")
+
 	r.NotFoundHandler = http.HandlerFunc(h.NotFound)
 
 	srv := &http.Server{
