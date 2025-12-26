@@ -1,0 +1,4 @@
+Agent: status-planner | 2025-12-24-223454
+Topic: virtualized-request-list
+Files: PLAN-2025-12-24-223454.md, DOD-2025-12-24-223454.md
+Items: 4 (P0: 2, P1: 1, P2: 1)

@@ -1,60 +1,60 @@
-import { type FC } from 'react'
-import { Copy, Check } from 'lucide-react'
-import { cn } from '@/lib/utils'
-import { useCopyToClipboard } from '@/lib/hooks/useCopyToClipboard'
+import { type FC, useState } from 'react';
+import { Copy, Check } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface CopyButtonProps {
-  content: string
-  className?: string
-  size?: 'sm' | 'md' | 'lg'
-  variant?: 'default' | 'ghost' | 'outline'
-  label?: string
+  content: string;
+  size?: 'sm' | 'md' | 'lg';
+  className?: string;
+  title?: string;
 }
 
 export const CopyButton: FC<CopyButtonProps> = ({
   content,
+  size = 'md',
   className,
-  size = 'sm',
-  variant = 'ghost',
-  label,
+  title = 'Copy to clipboard',
 }) => {
-  const { copied, copy } = useCopyToClipboard()
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error);
+    }
+  };
 
   const sizeClasses = {
-    sm: 'p-1.5',
-    md: 'p-2',
-    lg: 'p-2.5',
-  }
+    sm: 'p-1',
+    md: 'p-1.5',
+    lg: 'p-2',
+  };
 
   const iconSizes = {
-    sm: 'w-3.5 h-3.5',
+    sm: 'w-3 h-3',
     md: 'w-4 h-4',
     lg: 'w-5 h-5',
-  }
-
-  const variantClasses = {
-    default: 'bg-gray-200 hover:bg-gray-300 text-gray-700',
-    ghost: 'hover:bg-gray-100 text-gray-500 hover:text-gray-700',
-    outline: 'border border-gray-300 hover:bg-gray-50 text-gray-600',
-  }
+  };
 
   return (
     <button
-      onClick={() => copy(content)}
+      onClick={handleCopy}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded transition-colors',
+        'text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors',
         sizeClasses[size],
-        variantClasses[variant],
         className
       )}
-      title={copied ? 'Copied!' : 'Copy to clipboard'}
+      title={title}
     >
       {copied ? (
         <Check className={cn(iconSizes[size], 'text-green-500')} />
       ) : (
         <Copy className={iconSizes[size]} />
       )}
-      {label && <span className="text-xs">{label}</span>}
     </button>
-  )
-}
+  );
+};

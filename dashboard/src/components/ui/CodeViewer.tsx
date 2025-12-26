@@ -1,263 +1,229 @@
-import { type FC, useState, useMemo, useRef } from 'react'
-import { Copy, Check, Download, Maximize2, X } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { type FC, useState } from 'react';
+import { FileCode, Download, Maximize2, X } from 'lucide-react';
+import { CopyButton } from './CopyButton';
+import { cn } from '@/lib/utils';
 
 interface CodeViewerProps {
-  code: string
-  language?: string
-  filename?: string
-  maxHeight?: number
-  showLineNumbers?: boolean
-  showControls?: boolean
+  code: string;
+  filename?: string;
+  language?: string;
+  maxHeight?: number;
+  showControls?: boolean;
 }
 
 export const CodeViewer: FC<CodeViewerProps> = ({
   code,
-  language: providedLanguage,
   filename,
-  maxHeight = 400,
-  showLineNumbers = true,
+  language,
+  maxHeight = 500,
   showControls = true,
 }) => {
-  const [copied, setCopied] = useState(false)
-  const [fullscreen, setFullscreen] = useState(false)
-  const codeRef = useRef<HTMLPreElement>(null)
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
-  // Determine language from filename or provided value
-  const language = useMemo(() => {
-    if (providedLanguage) return providedLanguage
-    if (filename) return getLanguageFromFilename(filename)
-    return 'text'
-  }, [providedLanguage, filename])
+  // Determine language from file extension
+  const getLanguageFromFileName = (fname?: string): string => {
+    if (!fname) return 'text';
 
-  // Apply syntax highlighting
-  const highlightedLines = useMemo(() => {
-    const lines = code.split('\n')
-    return lines.map(line => highlightLine(line, language))
-  }, [code, language])
+    const extension = fname.split('.').pop()?.toLowerCase();
+    const languageMap: Record<string, string> = {
+      js: 'javascript',
+      jsx: 'javascript',
+      ts: 'typescript',
+      tsx: 'typescript',
+      py: 'python',
+      go: 'go',
+      rs: 'rust',
+      rb: 'ruby',
+      java: 'java',
+      c: 'c',
+      cpp: 'cpp',
+      cs: 'csharp',
+      php: 'php',
+      swift: 'swift',
+      kt: 'kotlin',
+      sh: 'bash',
+      bash: 'bash',
+      sql: 'sql',
+      html: 'html',
+      css: 'css',
+      scss: 'scss',
+      json: 'json',
+      yaml: 'yaml',
+      yml: 'yaml',
+      toml: 'toml',
+      md: 'markdown',
+      xml: 'xml',
+    };
 
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(code)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+    return languageMap[extension || ''] || 'text';
+  };
+
+  const detectedLanguage = language || getLanguageFromFileName(filename);
+
+  // Simple syntax highlighting
+  const highlightCode = (codeText: string): string => {
+    const escapeHtml = (str: string) =>
+      str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
+    const tokenPatterns = [
+      { regex: /"(?:[^"\\]|\\.)*"/, className: 'text-green-400' },
+      { regex: /'(?:[^'\\]|\\.)*'/, className: 'text-green-400' },
+      { regex: /`(?:[^`\\]|\\.)*`/, className: 'text-green-400' },
+      { regex: /\/\/.*$/, className: 'text-gray-500 italic' },
+      { regex: /\/\*[\s\S]*?\*\//, className: 'text-gray-500 italic' },
+      { regex: /#.*$/, className: 'text-gray-500 italic' },
+      {
+        regex:
+          /\b(function|const|let|var|if|else|for|while|return|class|import|export|from|async|await|def|elif|except|finally|lambda|with|as|raise|del|global|nonlocal|assert|break|continue|try|catch|throw|new|this|super|extends|implements|interface|abstract|static|public|private|protected|void|int|string|boolean|float|double|char|long|short|byte|enum|struct|typedef|union|namespace|using|package|goto|switch|case|default|fn|pub|mod|use|mut|match|loop|impl|trait|where|type|readonly|override)\b/,
+        className: 'text-blue-400',
+      },
+      {
+        regex: /\b(true|false|null|undefined|nil|None|True|False|NULL)\b/,
+        className: 'text-orange-400',
+      },
+      { regex: /\b\d+\.?\d*\b/, className: 'text-purple-400' },
+      { regex: /\b[A-Z][a-zA-Z0-9]*\b/, className: 'text-cyan-400' },
+    ];
+
+    const combinedPattern = new RegExp(
+      tokenPatterns.map((p) => `(${p.regex.source})`).join('|'),
+      'gm'
+    );
+
+    let result = '';
+    let lastIndex = 0;
+
+    for (const match of codeText.matchAll(combinedPattern)) {
+      if (match.index! > lastIndex) {
+        result += escapeHtml(codeText.slice(lastIndex, match.index));
+      }
+
+      const matchedText = match[0];
+      let className = '';
+      for (let i = 0; i < tokenPatterns.length; i++) {
+        if (match[i + 1] !== undefined) {
+          className = tokenPatterns[i].className;
+          break;
+        }
+      }
+
+      result += `<span class="${className}">${escapeHtml(matchedText)}</span>`;
+      lastIndex = match.index! + matchedText.length;
+    }
+
+    if (lastIndex < codeText.length) {
+      result += escapeHtml(codeText.slice(lastIndex));
+    }
+
+    return result;
+  };
 
   const handleDownload = () => {
-    const blob = new Blob([code], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename || `code.${getExtension(language)}`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
+    const blob = new Blob([code], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'code.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
-  const codeContent = (
-    <div className={cn(
-      "relative bg-gray-900 rounded-lg overflow-hidden",
-      fullscreen && "fixed inset-4 z-50 flex flex-col"
-    )}>
-      {/* Header with controls */}
+  const lines = code.split('\n');
+  const lineCount = lines.length;
+
+  const CodeDisplay = ({ inModal = false }: { inModal?: boolean }) => (
+    <div
+      className={cn(
+        'rounded-lg border border-gray-700 bg-gray-900 overflow-hidden',
+        !inModal && 'max-h-[600px]'
+      )}
+    >
       {showControls && (
-        <div className="flex items-center justify-between px-4 py-2 bg-gray-800 text-gray-400 text-xs">
-          <div className="flex items-center gap-2">
-            {filename && <span className="font-mono">{filename}</span>}
-            <span className="px-2 py-0.5 bg-gray-700 rounded">{language}</span>
+        <div className="px-4 py-2 bg-gray-800 border-b border-gray-700 flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <FileCode className="w-4 h-4 text-blue-400" />
+            <span className="text-sm text-gray-300 font-mono">
+              {filename || 'Untitled'}
+            </span>
+            <span className="text-xs text-gray-500 bg-gray-700 px-2 py-1 rounded">
+              {detectedLanguage}
+            </span>
+            <span className="text-xs text-gray-500">{lineCount} lines</span>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleCopy}
-              className="p-1.5 hover:bg-gray-700 rounded transition-colors"
-              title="Copy to clipboard"
-            >
-              {copied ? (
-                <Check className="w-4 h-4 text-green-400" />
-              ) : (
-                <Copy className="w-4 h-4" />
-              )}
-            </button>
+          <div className="flex items-center space-x-2">
             <button
               onClick={handleDownload}
-              className="p-1.5 hover:bg-gray-700 rounded transition-colors"
+              className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
               title="Download file"
             >
               <Download className="w-4 h-4" />
             </button>
-            <button
-              onClick={() => setFullscreen(!fullscreen)}
-              className="p-1.5 hover:bg-gray-700 rounded transition-colors"
-              title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
-            >
-              {fullscreen ? (
-                <X className="w-4 h-4" />
-              ) : (
+            {!inModal && (
+              <button
+                onClick={() => setIsFullscreen(true)}
+                className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
+                title="View fullscreen"
+              >
                 <Maximize2 className="w-4 h-4" />
-              )}
-            </button>
+              </button>
+            )}
+            <CopyButton content={code} className="text-gray-400 hover:text-white hover:bg-gray-700" />
           </div>
         </div>
       )}
 
-      {/* Code content */}
-      <pre
-        ref={codeRef}
-        className={cn(
-          "overflow-auto text-sm leading-relaxed",
-          fullscreen ? "flex-1" : ""
-        )}
-        style={{ maxHeight: fullscreen ? undefined : maxHeight }}
+      <div
+        className={cn('overflow-auto', inModal ? 'max-h-[80vh]' : `max-h-[${maxHeight}px]`)}
       >
-        <table className="w-full border-collapse">
+        <table className="w-full text-sm font-mono">
           <tbody>
-            {highlightedLines.map((html, i) => (
-              <tr key={i} className="hover:bg-gray-800/50">
-                {showLineNumbers && (
-                  <td className="select-none text-right pr-4 pl-4 text-gray-500 border-r border-gray-700 align-top">
-                    {i + 1}
-                  </td>
-                )}
-                <td
-                  className="pl-4 pr-4 text-gray-100"
-                  dangerouslySetInnerHTML={{ __html: html || '&nbsp;' }}
-                />
+            {lines.map((line, idx) => (
+              <tr key={idx} className="hover:bg-gray-800/50">
+                <td className="px-4 py-0.5 text-right text-gray-500 select-none w-12 align-top">
+                  {idx + 1}
+                </td>
+                <td className="px-4 py-0.5 whitespace-pre text-gray-300">
+                  <span dangerouslySetInnerHTML={{ __html: highlightCode(line) }} />
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
-      </pre>
+      </div>
     </div>
-  )
+  );
 
-  // Fullscreen backdrop
-  if (fullscreen) {
-    return (
-      <>
+  return (
+    <>
+      <CodeDisplay />
+
+      {isFullscreen && (
         <div
-          className="fixed inset-0 bg-black/80 z-40"
-          onClick={() => setFullscreen(false)}
-        />
-        {codeContent}
-      </>
-    )
-  }
-
-  return codeContent
-}
-
-// Syntax highlighting - single pass, no external dependencies
-function highlightLine(line: string, language: string): string {
-  let result = escapeHtml(line)
-
-  // Don't highlight plain text
-  if (language === 'text') return result
-
-  // Order matters! Apply patterns from most to least specific
-
-  // 1. Strings (double quotes, single quotes, backticks)
-  result = result.replace(
-    /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g,
-    '<span class="text-amber-300">$1</span>'
-  )
-
-  // 2. Comments
-  result = result.replace(
-    /(\/\/.*$|#.*$)/gm,
-    '<span class="text-gray-500 italic">$1</span>'
-  )
-
-  // 3. Keywords (language-specific)
-  const keywords = getKeywords(language)
-  if (keywords.length > 0) {
-    const keywordPattern = new RegExp(
-      `\\b(${keywords.join('|')})\\b(?![^<]*>)`,
-      'g'
-    )
-    result = result.replace(
-      keywordPattern,
-      '<span class="text-purple-400">$1</span>'
-    )
-  }
-
-  // 4. Literals (true, false, null, undefined, None, etc.)
-  result = result.replace(
-    /\b(true|false|null|undefined|None|True|False|nil)\b(?![^<]*>)/g,
-    '<span class="text-orange-400">$1</span>'
-  )
-
-  // 5. Numbers
-  result = result.replace(
-    /\b(\d+\.?\d*)\b(?![^<]*>)/g,
-    '<span class="text-cyan-300">$1</span>'
-  )
-
-  // 6. PascalCase identifiers (likely types/classes)
-  result = result.replace(
-    /\b([A-Z][a-zA-Z0-9]*)\b(?![^<]*>)/g,
-    '<span class="text-yellow-200">$1</span>'
-  )
-
-  return result
-}
-
-function getKeywords(language: string): string[] {
-  const keywordSets: Record<string, string[]> = {
-    javascript: ['const', 'let', 'var', 'function', 'class', 'extends', 'return', 'if', 'else', 'for', 'while', 'switch', 'case', 'break', 'continue', 'import', 'export', 'default', 'from', 'async', 'await', 'try', 'catch', 'throw', 'new', 'this', 'typeof', 'instanceof'],
-    typescript: ['const', 'let', 'var', 'function', 'class', 'extends', 'return', 'if', 'else', 'for', 'while', 'switch', 'case', 'break', 'continue', 'import', 'export', 'default', 'from', 'async', 'await', 'try', 'catch', 'throw', 'new', 'this', 'typeof', 'instanceof', 'interface', 'type', 'enum', 'implements', 'private', 'public', 'protected', 'readonly'],
-    python: ['def', 'class', 'return', 'if', 'elif', 'else', 'for', 'while', 'try', 'except', 'finally', 'raise', 'import', 'from', 'as', 'with', 'lambda', 'yield', 'assert', 'pass', 'break', 'continue', 'global', 'nonlocal', 'async', 'await'],
-    go: ['func', 'package', 'import', 'var', 'const', 'type', 'struct', 'interface', 'map', 'chan', 'go', 'defer', 'return', 'if', 'else', 'for', 'range', 'switch', 'case', 'default', 'break', 'continue', 'fallthrough', 'select'],
-    rust: ['fn', 'let', 'mut', 'const', 'struct', 'enum', 'impl', 'trait', 'pub', 'mod', 'use', 'return', 'if', 'else', 'for', 'while', 'loop', 'match', 'break', 'continue', 'async', 'await', 'move', 'ref', 'self', 'Self', 'where'],
-    bash: ['if', 'then', 'else', 'elif', 'fi', 'for', 'while', 'do', 'done', 'case', 'esac', 'function', 'return', 'exit', 'export', 'local', 'readonly', 'declare', 'unset', 'source', 'alias'],
-  }
-
-  return keywordSets[language] || keywordSets.javascript || []
-}
-
-function getLanguageFromFilename(filename: string): string {
-  const ext = filename.split('.').pop()?.toLowerCase() || ''
-  const languageMap: Record<string, string> = {
-    ts: 'typescript', tsx: 'typescript', mts: 'typescript', cts: 'typescript',
-    js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
-    py: 'python', pyw: 'python',
-    go: 'go',
-    rs: 'rust',
-    md: 'markdown', mdx: 'markdown',
-    json: 'json', jsonc: 'json',
-    yaml: 'yaml', yml: 'yaml',
-    sh: 'bash', bash: 'bash', zsh: 'bash',
-    css: 'css', scss: 'css', sass: 'css', less: 'css',
-    html: 'html', htm: 'html',
-    sql: 'sql',
-    dockerfile: 'docker',
-    makefile: 'make',
-    toml: 'toml',
-    xml: 'xml',
-  }
-  return languageMap[ext] || 'text'
-}
-
-function getExtension(language: string): string {
-  const extMap: Record<string, string> = {
-    typescript: 'ts',
-    javascript: 'js',
-    python: 'py',
-    go: 'go',
-    rust: 'rs',
-    bash: 'sh',
-    json: 'json',
-    yaml: 'yaml',
-    markdown: 'md',
-    html: 'html',
-    css: 'css',
-    sql: 'sql',
-  }
-  return extMap[language] || 'txt'
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-}
+          className="fixed inset-0 z-50 bg-black bg-opacity-90 flex items-center justify-center p-4"
+          onClick={() => setIsFullscreen(false)}
+        >
+          <div
+            className="relative max-w-[90vw] w-full max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setIsFullscreen(false)}
+              className="absolute -top-10 right-0 p-2 text-white hover:text-gray-300 transition-colors"
+              title="Close"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <CodeDisplay inModal />
+          </div>
+        </div>
+      )}
+    </>
+  );
+};

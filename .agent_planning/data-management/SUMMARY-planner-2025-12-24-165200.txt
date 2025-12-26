@@ -1,0 +1,4 @@
+Agent: status-planner | 2025-12-24-165200
+Topic: data-management
+Files: PLAN-2025-12-24-165200.md, DOD-2025-12-24-165200.md
+Items: 8 (P0: 3, P1: 2, P2: 3)

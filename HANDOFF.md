@@ -1,19 +1,20 @@
-# Phase 2: Rich Content Display - Implementation Handoff
+# Phase 3: Tool Support - Implementation Handoff
 
-**Branch:** `phase-2-rich-content-display`
-**Epic:** `brandon-fryslie_claude-code-proxy-kqw` (message-content-parser), `brandon-fryslie_claude-code-proxy-6j7` (code-viewer), `brandon-fryslie_claude-code-proxy-nhw` (copy-to-clipboard)
+**Branch:** `phase-3-tool-support`
+**Epic:** `brandon-fryslie_claude-code-proxy-62s` (tool-use-display), `brandon-fryslie_claude-code-proxy-k6y` (tool-result-display), `brandon-fryslie_claude-code-proxy-asz` (image-content-display)
 
 ---
 
 ## Executive Summary
 
-You are implementing the **Rich Content Display** system for the new dashboard. This is the foundation for all message rendering - without this, users see raw JSON instead of formatted content. Your work enables:
+You are implementing the **Tool Support** system for the new dashboard. Claude Code uses dozens of tools (Bash, Read, Write, Edit, Glob, Grep, etc.), and your work makes these tool calls and their results beautifully displayable.
 
-1. **Message Content Parser** - Transform Anthropic message blocks into React components
-2. **Code Viewer with Syntax Highlighting** - Display code with line numbers and language detection
-3. **Copy-to-Clipboard** - Universal copy buttons with visual feedback
+**Prerequisites:** Phase 2 (Rich Content Display) should be complete before you start. You'll build on top of `MessageContent`, `CodeViewer`, and `CopyButton` components.
 
-When complete, users will see beautifully formatted messages instead of raw JSON blobs.
+Your deliverables:
+1. **Tool Use Display** - Expandable, specialized views for each tool type
+2. **Tool Result Display** - Formatted results with content type detection
+3. **Image Content Display** - Base64 image rendering with zoom/lightbox
 
 ---
 
@@ -26,267 +27,570 @@ When complete, users will see beautifully formatted messages instead of raw JSON
 │   ├── src/
 │   │   ├── components/
 │   │   │   ├── layout/     # Sidebar, AppLayout, ResizablePanel
-│   │   │   └── ui/         # EMPTY - you'll add components here
+│   │   │   └── ui/         # Should have Phase 2 components
+│   │   │       ├── MessageContent.tsx    # From Phase 2
+│   │   │       ├── CodeViewer.tsx        # From Phase 2
+│   │   │       ├── CopyButton.tsx        # From Phase 2
+│   │   │       └── ...                   # Your new components go here
 │   │   ├── pages/
-│   │   │   └── Requests.tsx  # Currently shows raw JSON
-│   │   ├── lib/
-│   │   │   ├── types.ts    # TypeScript interfaces
-│   │   │   ├── api.ts      # React Query hooks
-│   │   │   └── utils.ts    # cn() utility
-│   │   └── index.css       # Theme variables
-├── web/                    # OLD dashboard (reference implementation)
-│   └── app/
-│       ├── components/
-│       │   ├── MessageContent.tsx   # REFERENCE: Message rendering
-│       │   ├── CodeViewer.tsx       # REFERENCE: Code display
-│       │   ├── ToolUse.tsx          # REFERENCE: Tool rendering
-│       │   └── ToolResult.tsx       # REFERENCE: Result rendering
-│       └── utils/
-│           └── formatters.ts        # REFERENCE: Text utilities
-└── proxy/                  # Go backend (API reference)
+│   │   └── lib/
+│   │       ├── types.ts    # TypeScript interfaces
+│   │       ├── api.ts      # React Query hooks
+│   │       └── utils.ts    # cn() utility
+├── web/                    # OLD dashboard (reference)
+│   └── app/components/
+│       ├── ToolUse.tsx          # REFERENCE
+│       ├── ToolResult.tsx       # REFERENCE
+│       ├── ImageContent.tsx     # REFERENCE
+│       ├── CodeDiff.tsx         # REFERENCE: For Edit tool
+│       └── TodoList.tsx         # REFERENCE: For TodoWrite tool
+└── proxy/                  # Go backend
 ```
 
-### Tech Stack (Dashboard)
+### Tech Stack
 - React 19.2.0
 - TypeScript 5.9.3 (strict mode)
-- Vite 7.2.4
 - Tailwind CSS 4.1.18
-- TanStack React Query 5.90.12
-- Lucide React 0.562.0 (icons)
-
-### Running the Dashboard
-```bash
-cd dashboard
-pnpm install
-pnpm dev  # Starts on http://localhost:5174
-```
-
-The backend proxy must be running on port 3001:
-```bash
-cd proxy && go run cmd/proxy/main.go
-```
+- Lucide React 0.562.0
 
 ---
 
-## Topic 1: Message Content Parser
+## The Tools You'll Display
 
-### What You're Building
+Claude Code has access to these tools. You need specialized rendering for each:
 
-A component system that transforms Anthropic API message content into React components. Messages can contain:
+### High Priority (Most Common)
+| Tool | Purpose | Special Rendering Needed |
+|------|---------|-------------------------|
+| `Bash` | Execute shell commands | Command preview, exit codes, output formatting |
+| `Read` | Read file contents | File path display, line number support |
+| `Write` | Write entire files | File path, content preview with syntax highlighting |
+| `Edit` | Edit portions of files | **Side-by-side diff** (old vs new) |
+| `Glob` | Find files by pattern | Pattern display, file list results |
+| `Grep` | Search file contents | Pattern, matches with context |
+| `Task` | Launch sub-agents | Agent type, prompt preview |
 
-1. **Text content** - Plain text or markdown-like formatting
-2. **Tool use blocks** - Claude invoking tools with parameters
-3. **Tool result blocks** - Results returned from tool execution
-4. **Image content** - Base64 encoded images
-5. **Special XML tags** - `<system-reminder>`, `<functions>` blocks
+### Medium Priority
+| Tool | Purpose | Special Rendering Needed |
+|------|---------|-------------------------|
+| `TodoWrite` | Manage todo lists | **Formatted todo list** with status icons |
+| `WebFetch` | Fetch web content | URL display, content preview |
+| `WebSearch` | Search the web | Query display, results list |
+| `AskUserQuestion` | Ask user questions | Question display, options |
+| `NotebookEdit` | Edit Jupyter notebooks | Cell number, content |
 
-### Anthropic Message Format
+### Lower Priority (Generic OK)
+| Tool | Purpose |
+|------|---------|
+| `MultiEdit` | Multiple edits in one call |
+| `KillShell` | Terminate background shell |
+| `Skill` | Invoke skills |
+| `EnterPlanMode` | Enter planning mode |
+| `ExitPlanMode` | Exit planning mode |
 
-Messages come from the API in this structure:
+---
 
-```typescript
-// From dashboard/src/lib/types.ts
-interface AnthropicMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string | ContentBlock[];
-}
-
-// Content can be a string OR an array of blocks:
-type ContentBlock =
-  | TextBlock
-  | ToolUseBlock
-  | ToolResultBlock
-  | ImageBlock;
-
-interface TextBlock {
-  type: 'text';
-  text: string;
-}
-
-interface ToolUseBlock {
-  type: 'tool_use';
-  id: string;          // e.g., "toolu_01XYZ..."
-  name: string;        // e.g., "bash", "file_editor", "read_file"
-  input: Record<string, unknown>;  // Tool-specific parameters
-}
-
-interface ToolResultBlock {
-  type: 'tool_result';
-  tool_use_id: string;  // References the tool_use block
-  content: string | ContentBlock[];
-  is_error?: boolean;
-}
-
-interface ImageBlock {
-  type: 'image';
-  source: {
-    type: 'base64';
-    media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
-    data: string;  // Base64 encoded
-  };
-}
-```
+## Topic 1: Tool Use Display (Expandable)
 
 ### Component Architecture
 
-Create these files in `dashboard/src/components/ui/`:
-
 ```
-components/ui/
-├── MessageContent.tsx      # Main entry point - routes to sub-components
-├── TextContent.tsx         # Renders text with formatting
-├── ToolUseContent.tsx      # Renders tool invocations
-├── ToolResultContent.tsx   # Renders tool results
-├── ImageContent.tsx        # Renders base64 images
-├── SystemReminder.tsx      # Handles <system-reminder> tags
-├── FunctionDefinitions.tsx # Handles <functions> blocks
-└── index.ts                # Barrel exports
+components/ui/tools/
+├── ToolUseContainer.tsx    # Main wrapper with expand/collapse
+├── ToolHeader.tsx          # Tool name, ID, status indicator
+├── ToolInputGeneric.tsx    # Fallback for unknown tools
+├── tools/                  # Specialized tool renderers
+│   ├── BashTool.tsx
+│   ├── ReadTool.tsx
+│   ├── WriteTool.tsx
+│   ├── EditTool.tsx        # With CodeDiff
+│   ├── GlobTool.tsx
+│   ├── GrepTool.tsx
+│   ├── TaskTool.tsx
+│   └── TodoWriteTool.tsx
+└── index.ts
 ```
 
-### MessageContent.tsx - Main Component
+### ToolUseContainer.tsx - Main Component
 
 ```tsx
-// dashboard/src/components/ui/MessageContent.tsx
-import { type FC } from 'react';
-import { TextContent } from './TextContent';
-import { ToolUseContent } from './ToolUseContent';
-import { ToolResultContent } from './ToolResultContent';
-import { ImageContent } from './ImageContent';
+// dashboard/src/components/ui/tools/ToolUseContainer.tsx
+import { type FC, useState } from 'react';
+import { ChevronDown, Terminal, Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { CopyButton } from '../CopyButton';
+import { ToolInputGeneric } from './ToolInputGeneric';
 
-interface ContentBlock {
-  type: string;
-  [key: string]: unknown;
+// Import specialized tools
+import { BashTool } from './tools/BashTool';
+import { ReadTool } from './tools/ReadTool';
+import { WriteTool } from './tools/WriteTool';
+import { EditTool } from './tools/EditTool';
+import { GlobTool } from './tools/GlobTool';
+import { GrepTool } from './tools/GrepTool';
+import { TaskTool } from './tools/TaskTool';
+import { TodoWriteTool } from './tools/TodoWriteTool';
+
+interface ToolUseContainerProps {
+  id: string;
+  name: string;
+  input: Record<string, unknown>;
+  isExecuting?: boolean;  // Show pulsing indicator
+  defaultExpanded?: boolean;
 }
 
-interface MessageContentProps {
-  content: string | ContentBlock[];
-  showSystemReminders?: boolean;  // Default: false (hide them)
-}
+// Map tool names to specialized renderers
+const TOOL_RENDERERS: Record<string, FC<{ input: Record<string, unknown> }>> = {
+  Bash: BashTool,
+  bash: BashTool,
+  Read: ReadTool,
+  read: ReadTool,
+  read_file: ReadTool,
+  Write: WriteTool,
+  write: WriteTool,
+  write_file: WriteTool,
+  Edit: EditTool,
+  edit: EditTool,
+  edit_file: EditTool,
+  Glob: GlobTool,
+  glob: GlobTool,
+  Grep: GrepTool,
+  grep: GrepTool,
+  Task: TaskTool,
+  task: TaskTool,
+  TodoWrite: TodoWriteTool,
+  todowrite: TodoWriteTool,
+};
 
-export const MessageContent: FC<MessageContentProps> = ({
-  content,
-  showSystemReminders = false
+export const ToolUseContainer: FC<ToolUseContainerProps> = ({
+  id,
+  name,
+  input,
+  isExecuting = true,
+  defaultExpanded = false,
 }) => {
-  // Handle string content (simple case)
-  if (typeof content === 'string') {
-    return <TextContent text={content} showSystemReminders={showSystemReminders} />;
-  }
+  const [expanded, setExpanded] = useState(defaultExpanded);
 
-  // Handle array of content blocks
-  if (!Array.isArray(content)) {
-    return <pre className="text-xs text-red-500">Unknown content format</pre>;
-  }
+  // Get specialized renderer or fall back to generic
+  const ToolRenderer = TOOL_RENDERERS[name] || ToolInputGeneric;
 
   return (
-    <div className="space-y-3">
-      {content.map((block, index) => (
-        <ContentBlockRenderer
-          key={`${block.type}-${index}`}
-          block={block}
-          showSystemReminders={showSystemReminders}
-        />
-      ))}
+    <div className="border border-indigo-200 rounded-lg bg-gradient-to-r from-indigo-50 to-blue-50 overflow-hidden shadow-sm">
+      {/* Header - Always visible */}
+      <ToolHeader
+        name={name}
+        id={id}
+        expanded={expanded}
+        isExecuting={isExecuting}
+        onToggle={() => setExpanded(!expanded)}
+      />
+
+      {/* Expandable content */}
+      {expanded && (
+        <div className="px-4 py-3 border-t border-indigo-100 bg-white/60">
+          <ToolRenderer input={input} />
+        </div>
+      )}
+
+      {/* Execution indicator footer */}
+      {isExecuting && (
+        <div className="px-4 py-1.5 bg-indigo-100/50 text-xs text-indigo-600 flex items-center gap-2 border-t border-indigo-100">
+          <Loader2 className="w-3 h-3 animate-spin" />
+          <span>Executing {name}...</span>
+        </div>
+      )}
     </div>
   );
 };
 
-const ContentBlockRenderer: FC<{
-  block: ContentBlock;
-  showSystemReminders: boolean;
-}> = ({ block, showSystemReminders }) => {
-  switch (block.type) {
-    case 'text':
-      return (
-        <TextContent
-          text={block.text as string}
-          showSystemReminders={showSystemReminders}
-        />
-      );
+// Header Component
+const ToolHeader: FC<{
+  name: string;
+  id: string;
+  expanded: boolean;
+  isExecuting: boolean;
+  onToggle: () => void;
+}> = ({ name, id, expanded, isExecuting, onToggle }) => {
+  const shortId = id.slice(-8);
 
-    case 'tool_use':
-      return (
-        <ToolUseContent
-          id={block.id as string}
-          name={block.name as string}
-          input={block.input as Record<string, unknown>}
-        />
-      );
+  return (
+    <div
+      className="flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-white/50 transition-colors"
+      onClick={onToggle}
+    >
+      <div className="flex items-center gap-3">
+        {/* Tool icon */}
+        <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
+          <Terminal className="w-4 h-4 text-indigo-600" />
+        </div>
 
-    case 'tool_result':
-      return (
-        <ToolResultContent
-          toolUseId={block.tool_use_id as string}
-          content={block.content as string | ContentBlock[]}
-          isError={block.is_error as boolean | undefined}
-        />
-      );
+        {/* Tool name and ID */}
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-indigo-900">{name}</span>
+            {isExecuting && (
+              <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
+            )}
+          </div>
+          <div className="flex items-center gap-1 text-xs text-gray-400">
+            <span className="font-mono">{shortId}</span>
+            <CopyButton
+              content={id}
+              size="sm"
+              className="opacity-0 group-hover:opacity-100"
+            />
+          </div>
+        </div>
+      </div>
 
-    case 'image':
-      return <ImageContent source={block.source as ImageSource} />;
-
-    default:
-      // Fallback for unknown types - show raw JSON
-      return (
-        <details className="text-xs">
-          <summary className="cursor-pointer text-gray-500">
-            Unknown block type: {block.type}
-          </summary>
-          <pre className="mt-2 p-2 bg-gray-100 rounded overflow-x-auto">
-            {JSON.stringify(block, null, 2)}
-          </pre>
-        </details>
-      );
-  }
+      {/* Expand/collapse chevron */}
+      <ChevronDown
+        className={cn(
+          "w-5 h-5 text-gray-400 transition-transform duration-200",
+          expanded && "rotate-180"
+        )}
+      />
+    </div>
+  );
 };
 ```
 
-### TextContent.tsx - Text Rendering
-
-The text content component needs to handle:
-1. Basic text display
-2. `<system-reminder>` tags (usually hidden)
-3. `<functions>` blocks (tool definitions from system prompts)
-4. Markdown-like formatting (bold, italic, code)
+### BashTool.tsx - Shell Command Display
 
 ```tsx
-// dashboard/src/components/ui/TextContent.tsx
-import { type FC, useMemo } from 'react';
-import { SystemReminder } from './SystemReminder';
-import { FunctionDefinitions } from './FunctionDefinitions';
+// dashboard/src/components/ui/tools/tools/BashTool.tsx
+import { type FC } from 'react';
+import { Terminal, Clock, FolderOpen } from 'lucide-react';
 
-interface TextContentProps {
-  text: string;
-  showSystemReminders?: boolean;
+interface BashToolInput {
+  command?: string;
+  description?: string;
+  timeout?: number;
+  run_in_background?: boolean;
+  dangerouslyDisableSandbox?: boolean;
 }
 
-export const TextContent: FC<TextContentProps> = ({
-  text,
-  showSystemReminders = false
-}) => {
-  const { regularContent, systemReminders, functionBlocks } = useMemo(() => {
-    return parseTextContent(text);
-  }, [text]);
+export const BashTool: FC<{ input: Record<string, unknown> }> = ({ input }) => {
+  const {
+    command,
+    description,
+    timeout,
+    run_in_background,
+    dangerouslyDisableSandbox
+  } = input as BashToolInput;
 
   return (
-    <div className="space-y-2">
-      {/* Regular text content */}
-      {regularContent && (
-        <div
-          className="prose prose-sm max-w-none"
-          dangerouslySetInnerHTML={{ __html: formatText(regularContent) }}
+    <div className="space-y-3">
+      {/* Description */}
+      {description && (
+        <div className="text-sm text-gray-600 italic">
+          {description}
+        </div>
+      )}
+
+      {/* Command display */}
+      {command && (
+        <div className="font-mono text-sm bg-gray-900 text-gray-100 p-3 rounded-lg overflow-x-auto">
+          <div className="flex items-start gap-2">
+            <span className="text-green-400 select-none">$</span>
+            <span className="whitespace-pre-wrap break-all">{command}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Metadata badges */}
+      <div className="flex flex-wrap gap-2">
+        {timeout && (
+          <Badge icon={Clock} label={`Timeout: ${timeout}ms`} />
+        )}
+        {run_in_background && (
+          <Badge icon={FolderOpen} label="Background" variant="blue" />
+        )}
+        {dangerouslyDisableSandbox && (
+          <Badge icon={Terminal} label="No Sandbox" variant="red" />
+        )}
+      </div>
+    </div>
+  );
+};
+
+// Reusable badge component
+const Badge: FC<{
+  icon: FC<{ className?: string }>;
+  label: string;
+  variant?: 'gray' | 'blue' | 'red';
+}> = ({ icon: Icon, label, variant = 'gray' }) => {
+  const variants = {
+    gray: 'bg-gray-100 text-gray-600 border-gray-200',
+    blue: 'bg-blue-50 text-blue-600 border-blue-200',
+    red: 'bg-red-50 text-red-600 border-red-200',
+  };
+
+  return (
+    <div className={cn(
+      "flex items-center gap-1.5 px-2 py-1 text-xs rounded-full border",
+      variants[variant]
+    )}>
+      <Icon className="w-3 h-3" />
+      <span>{label}</span>
+    </div>
+  );
+};
+```
+
+### EditTool.tsx - With Side-by-Side Diff
+
+This is the most complex tool renderer. The Edit tool shows what code is being changed.
+
+```tsx
+// dashboard/src/components/ui/tools/tools/EditTool.tsx
+import { type FC, useMemo } from 'react';
+import { FileEdit, ArrowRight } from 'lucide-react';
+import { CodeViewer } from '../../CodeViewer';
+
+interface EditToolInput {
+  file_path?: string;
+  old_string?: string;
+  new_string?: string;
+  replace_all?: boolean;
+}
+
+export const EditTool: FC<{ input: Record<string, unknown> }> = ({ input }) => {
+  const { file_path, old_string, new_string, replace_all } = input as EditToolInput;
+
+  return (
+    <div className="space-y-3">
+      {/* File path */}
+      {file_path && (
+        <div className="flex items-center gap-2 text-sm">
+          <FileEdit className="w-4 h-4 text-gray-400" />
+          <span className="font-mono text-blue-600">{file_path}</span>
+          {replace_all && (
+            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded">
+              Replace All
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Side-by-side diff */}
+      {old_string !== undefined && new_string !== undefined && (
+        <CodeDiff
+          oldCode={old_string}
+          newCode={new_string}
+          language={getLanguageFromPath(file_path || '')}
         />
       )}
+    </div>
+  );
+};
 
-      {/* Function definitions (from system prompts) */}
-      {functionBlocks.length > 0 && (
-        <FunctionDefinitions blocks={functionBlocks} />
+// Side-by-side diff component
+interface CodeDiffProps {
+  oldCode: string;
+  newCode: string;
+  language?: string;
+}
+
+const CodeDiff: FC<CodeDiffProps> = ({ oldCode, newCode, language = 'text' }) => {
+  const { oldLines, newLines, changes } = useMemo(() => {
+    return computeDiff(oldCode, newCode);
+  }, [oldCode, newCode]);
+
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      {/* Old code (deletions) */}
+      <div className="rounded-lg overflow-hidden border border-red-200">
+        <div className="bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 border-b border-red-200">
+          Old
+        </div>
+        <div className="bg-gray-900 p-2 text-sm font-mono overflow-x-auto max-h-64">
+          {oldLines.map((line, i) => (
+            <div
+              key={i}
+              className={cn(
+                "px-2 py-0.5",
+                changes.removed.has(i) && "bg-red-900/30 text-red-300"
+              )}
+            >
+              <span className="text-gray-500 select-none mr-3">{i + 1}</span>
+              <span className="text-gray-100">{line || ' '}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* New code (additions) */}
+      <div className="rounded-lg overflow-hidden border border-green-200">
+        <div className="bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700 border-b border-green-200">
+          New
+        </div>
+        <div className="bg-gray-900 p-2 text-sm font-mono overflow-x-auto max-h-64">
+          {newLines.map((line, i) => (
+            <div
+              key={i}
+              className={cn(
+                "px-2 py-0.5",
+                changes.added.has(i) && "bg-green-900/30 text-green-300"
+              )}
+            >
+              <span className="text-gray-500 select-none mr-3">{i + 1}</span>
+              <span className="text-gray-100">{line || ' '}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Simple line-based diff algorithm
+function computeDiff(oldCode: string, newCode: string) {
+  const oldLines = oldCode.split('\n');
+  const newLines = newCode.split('\n');
+
+  // Find common prefix
+  let prefixLen = 0;
+  while (
+    prefixLen < oldLines.length &&
+    prefixLen < newLines.length &&
+    oldLines[prefixLen] === newLines[prefixLen]
+  ) {
+    prefixLen++;
+  }
+
+  // Find common suffix
+  let suffixLen = 0;
+  while (
+    suffixLen < oldLines.length - prefixLen &&
+    suffixLen < newLines.length - prefixLen &&
+    oldLines[oldLines.length - 1 - suffixLen] === newLines[newLines.length - 1 - suffixLen]
+  ) {
+    suffixLen++;
+  }
+
+  // Mark changed lines
+  const removed = new Set<number>();
+  const added = new Set<number>();
+
+  for (let i = prefixLen; i < oldLines.length - suffixLen; i++) {
+    removed.add(i);
+  }
+  for (let i = prefixLen; i < newLines.length - suffixLen; i++) {
+    added.add(i);
+  }
+
+  return {
+    oldLines,
+    newLines,
+    changes: { removed, added },
+  };
+}
+
+function getLanguageFromPath(path: string): string {
+  const ext = path.split('.').pop()?.toLowerCase() || '';
+  const langMap: Record<string, string> = {
+    ts: 'typescript', tsx: 'typescript',
+    js: 'javascript', jsx: 'javascript',
+    py: 'python', go: 'go', rs: 'rust',
+    md: 'markdown', json: 'json', yaml: 'yaml',
+  };
+  return langMap[ext] || 'text';
+}
+```
+
+### TodoWriteTool.tsx - Formatted Todo List
+
+```tsx
+// dashboard/src/components/ui/tools/tools/TodoWriteTool.tsx
+import { type FC } from 'react';
+import { CheckCircle, Circle, Clock, AlertCircle } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+interface Todo {
+  content?: string;
+  task?: string;
+  description?: string;
+  title?: string;
+  text?: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  activeForm?: string;
+  priority?: 'high' | 'medium' | 'low';
+}
+
+interface TodoWriteInput {
+  todos?: Todo[];
+}
+
+export const TodoWriteTool: FC<{ input: Record<string, unknown> }> = ({ input }) => {
+  const { todos = [] } = input as TodoWriteInput;
+
+  if (todos.length === 0) {
+    return (
+      <div className="text-sm text-gray-500 italic">
+        Empty todo list
+      </div>
+    );
+  }
+
+  // Group by status
+  const grouped = {
+    in_progress: todos.filter(t => t.status === 'in_progress'),
+    pending: todos.filter(t => t.status === 'pending'),
+    completed: todos.filter(t => t.status === 'completed'),
+  };
+
+  // Count summary
+  const total = todos.length;
+  const done = grouped.completed.length;
+
+  return (
+    <div className="space-y-4">
+      {/* Summary */}
+      <div className="flex items-center gap-3 text-sm">
+        <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-green-500 transition-all"
+            style={{ width: `${(done / total) * 100}%` }}
+          />
+        </div>
+        <span className="text-gray-600">
+          {done}/{total} complete
+        </span>
+      </div>
+
+      {/* In Progress - show first */}
+      {grouped.in_progress.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-blue-600 uppercase tracking-wide">
+            In Progress
+          </div>
+          {grouped.in_progress.map((todo, i) => (
+            <TodoItem key={i} todo={todo} />
+          ))}
+        </div>
       )}
 
-      {/* System reminders (collapsible, usually hidden) */}
-      {showSystemReminders && systemReminders.length > 0 && (
+      {/* Pending */}
+      {grouped.pending.length > 0 && (
         <div className="space-y-2">
-          {systemReminders.map((reminder, i) => (
-            <SystemReminder key={i} content={reminder} />
+          <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+            Pending
+          </div>
+          {grouped.pending.map((todo, i) => (
+            <TodoItem key={i} todo={todo} />
+          ))}
+        </div>
+      )}
+
+      {/* Completed */}
+      {grouped.completed.length > 0 && (
+        <div className="space-y-2">
+          <div className="text-xs font-medium text-green-600 uppercase tracking-wide">
+            Completed
+          </div>
+          {grouped.completed.map((todo, i) => (
+            <TodoItem key={i} todo={todo} />
           ))}
         </div>
       )}
@@ -294,233 +598,349 @@ export const TextContent: FC<TextContentProps> = ({
   );
 };
 
-// Parse text to extract special sections
-function parseTextContent(text: string): {
-  regularContent: string;
-  systemReminders: string[];
-  functionBlocks: string[];
-} {
-  const systemReminders: string[] = [];
-  const functionBlocks: string[] = [];
+const TodoItem: FC<{ todo: Todo }> = ({ todo }) => {
+  // Get the todo text from various possible fields
+  const text = todo.content || todo.task || todo.description || todo.title || todo.text || '';
 
-  // Extract <system-reminder> tags
-  let regularContent = text.replace(
-    /<system-reminder>([\s\S]*?)<\/system-reminder>/g,
-    (_, content) => {
-      systemReminders.push(content.trim());
-      return '';
-    }
-  );
-
-  // Extract <functions> blocks
-  regularContent = regularContent.replace(
-    /<functions>([\s\S]*?)<\/functions>/g,
-    (_, content) => {
-      functionBlocks.push(content.trim());
-      return '';
-    }
-  );
-
-  return {
-    regularContent: regularContent.trim(),
-    systemReminders,
-    functionBlocks,
-  };
-}
-
-// Format text with markdown-like syntax
-function formatText(text: string): string {
-  let html = escapeHtml(text);
-
-  // Convert markdown-like syntax
-  // **bold** -> <strong>
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-
-  // *italic* -> <em>
-  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
-
-  // `code` -> <code>
-  html = html.replace(/`([^`]+)`/g, '<code class="bg-gray-100 px-1 rounded text-sm">$1</code>');
-
-  // Line breaks
-  html = html.replace(/\n\n/g, '</p><p class="mt-2">');
-  html = html.replace(/\n/g, '<br>');
-
-  return `<p>${html}</p>`;
-}
-
-function escapeHtml(text: string): string {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-```
-
-### ToolUseContent.tsx - Tool Invocation Display
-
-```tsx
-// dashboard/src/components/ui/ToolUseContent.tsx
-import { type FC, useState } from 'react';
-import { ChevronDown, Terminal, Copy, Check } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { CodeViewer } from './CodeViewer';
-
-interface ToolUseContentProps {
-  id: string;
-  name: string;
-  input: Record<string, unknown>;
-}
-
-// Special rendering for common tools
-const SPECIAL_TOOLS = ['bash', 'read_file', 'write_file', 'edit_file', 'glob', 'grep'];
-
-export const ToolUseContent: FC<ToolUseContentProps> = ({ id, name, input }) => {
-  const [expanded, setExpanded] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  const copyId = async () => {
-    await navigator.clipboard.writeText(id);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const statusConfig = {
+    pending: {
+      icon: Circle,
+      iconClass: 'text-gray-400',
+      textClass: 'text-gray-700',
+    },
+    in_progress: {
+      icon: Clock,
+      iconClass: 'text-blue-500 animate-pulse',
+      textClass: 'text-blue-700 font-medium',
+    },
+    completed: {
+      icon: CheckCircle,
+      iconClass: 'text-green-500',
+      textClass: 'text-gray-500 line-through',
+    },
   };
 
-  const isSpecialTool = SPECIAL_TOOLS.includes(name);
+  const config = statusConfig[todo.status] || statusConfig.pending;
+  const Icon = config.icon;
+
+  const priorityColors = {
+    high: 'bg-red-100 text-red-700 border-red-200',
+    medium: 'bg-amber-100 text-amber-700 border-amber-200',
+    low: 'bg-blue-100 text-blue-700 border-blue-200',
+  };
 
   return (
-    <div className="border rounded-lg bg-gradient-to-r from-indigo-50 to-blue-50 overflow-hidden">
-      {/* Header */}
-      <div
-        className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-white/50 transition-colors"
-        onClick={() => setExpanded(!expanded)}
-      >
-        <div className="flex items-center gap-2">
-          <Terminal className="w-4 h-4 text-indigo-600" />
-          <span className="font-medium text-indigo-900">{name}</span>
-          <button
-            onClick={(e) => { e.stopPropagation(); copyId(); }}
-            className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1"
-          >
-            {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-            <span className="font-mono">{id.slice(-8)}</span>
-          </button>
-        </div>
-        <ChevronDown
-          className={cn(
-            "w-4 h-4 text-gray-400 transition-transform",
-            expanded && "rotate-180"
-          )}
-        />
+    <div className="flex items-start gap-2 py-1.5">
+      <Icon className={cn("w-4 h-4 mt-0.5 flex-shrink-0", config.iconClass)} />
+      <div className="flex-1 min-w-0">
+        <span className={cn("text-sm", config.textClass)}>
+          {todo.status === 'in_progress' && todo.activeForm
+            ? todo.activeForm
+            : text}
+        </span>
+        {todo.priority && (
+          <span className={cn(
+            "ml-2 px-1.5 py-0.5 text-xs rounded border",
+            priorityColors[todo.priority]
+          )}>
+            {todo.priority}
+          </span>
+        )}
       </div>
+    </div>
+  );
+};
+```
 
-      {/* Tool Input */}
-      {expanded && (
-        <div className="px-4 py-3 border-t bg-white/50">
-          {isSpecialTool ? (
-            <SpecialToolInput name={name} input={input} />
-          ) : (
-            <GenericToolInput input={input} />
+### Other Tool Renderers
+
+I'll provide compact versions of the other specialized tools:
+
+```tsx
+// dashboard/src/components/ui/tools/tools/ReadTool.tsx
+import { type FC } from 'react';
+import { FileText, Hash } from 'lucide-react';
+
+export const ReadTool: FC<{ input: Record<string, unknown> }> = ({ input }) => {
+  const path = input.file_path || input.path || '';
+  const offset = input.offset as number | undefined;
+  const limit = input.limit as number | undefined;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 text-sm">
+        <FileText className="w-4 h-4 text-gray-400" />
+        <span className="font-mono text-blue-600">{String(path)}</span>
+      </div>
+      {(offset || limit) && (
+        <div className="flex gap-3 text-xs text-gray-500">
+          {offset && (
+            <span className="flex items-center gap-1">
+              <Hash className="w-3 h-3" />
+              Offset: {offset}
+            </span>
+          )}
+          {limit && (
+            <span className="flex items-center gap-1">
+              <Hash className="w-3 h-3" />
+              Limit: {limit} lines
+            </span>
           )}
         </div>
       )}
+    </div>
+  );
+};
 
-      {/* Execution indicator (pulsing dot) */}
-      <div className="px-4 py-1 bg-indigo-100/50 text-xs text-indigo-600 flex items-center gap-2">
-        <span className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
-        Executing tool...
+// dashboard/src/components/ui/tools/tools/WriteTool.tsx
+import { type FC } from 'react';
+import { FilePlus } from 'lucide-react';
+import { CodeViewer } from '../../CodeViewer';
+
+export const WriteTool: FC<{ input: Record<string, unknown> }> = ({ input }) => {
+  const path = String(input.file_path || input.path || '');
+  const content = String(input.content || '');
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 text-sm">
+        <FilePlus className="w-4 h-4 text-green-500" />
+        <span className="font-mono text-blue-600">{path}</span>
+      </div>
+      {content && (
+        <CodeViewer
+          code={content}
+          filename={path}
+          maxHeight={200}
+          showControls={true}
+        />
+      )}
+    </div>
+  );
+};
+
+// dashboard/src/components/ui/tools/tools/GlobTool.tsx
+import { type FC } from 'react';
+import { Search, FolderOpen } from 'lucide-react';
+
+export const GlobTool: FC<{ input: Record<string, unknown> }> = ({ input }) => {
+  const pattern = String(input.pattern || '');
+  const path = input.path as string | undefined;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <Search className="w-4 h-4 text-gray-400" />
+        <code className="px-2 py-1 bg-gray-100 rounded text-sm font-mono">
+          {pattern}
+        </code>
+      </div>
+      {path && (
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          <FolderOpen className="w-3 h-3" />
+          <span>in {path}</span>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// dashboard/src/components/ui/tools/tools/GrepTool.tsx
+import { type FC } from 'react';
+import { FileSearch, FolderOpen, FileType } from 'lucide-react';
+
+export const GrepTool: FC<{ input: Record<string, unknown> }> = ({ input }) => {
+  const pattern = String(input.pattern || '');
+  const path = input.path as string | undefined;
+  const glob = input.glob as string | undefined;
+  const type = input.type as string | undefined;
+  const outputMode = input.output_mode as string | undefined;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <FileSearch className="w-4 h-4 text-purple-500" />
+        <code className="px-2 py-1 bg-purple-50 border border-purple-200 rounded text-sm font-mono text-purple-700">
+          /{pattern}/
+        </code>
+      </div>
+      <div className="flex flex-wrap gap-2 text-xs">
+        {path && (
+          <span className="flex items-center gap-1 text-gray-500">
+            <FolderOpen className="w-3 h-3" />
+            {path}
+          </span>
+        )}
+        {glob && (
+          <span className="px-2 py-0.5 bg-gray-100 rounded">
+            glob: {glob}
+          </span>
+        )}
+        {type && (
+          <span className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-600 rounded">
+            <FileType className="w-3 h-3" />
+            {type}
+          </span>
+        )}
+        {outputMode && (
+          <span className="px-2 py-0.5 bg-gray-100 rounded">
+            {outputMode}
+          </span>
+        )}
       </div>
     </div>
   );
 };
 
-// Special rendering for common tools
-const SpecialToolInput: FC<{ name: string; input: Record<string, unknown> }> = ({ name, input }) => {
-  switch (name) {
-    case 'bash':
-      return (
-        <div className="font-mono text-sm bg-gray-900 text-gray-100 p-3 rounded">
-          <span className="text-green-400">$ </span>
-          {String(input.command || '')}
-        </div>
-      );
+// dashboard/src/components/ui/tools/tools/TaskTool.tsx
+import { type FC } from 'react';
+import { Users, FileText } from 'lucide-react';
 
-    case 'read_file':
-      return (
-        <div className="text-sm">
-          <span className="text-gray-500">Reading: </span>
-          <span className="font-mono text-blue-600">{String(input.path || input.file_path || '')}</span>
-        </div>
-      );
+export const TaskTool: FC<{ input: Record<string, unknown> }> = ({ input }) => {
+  const subagentType = String(input.subagent_type || '');
+  const description = String(input.description || '');
+  const prompt = String(input.prompt || '');
+  const model = input.model as string | undefined;
+  const runInBackground = input.run_in_background as boolean | undefined;
 
-    case 'write_file':
-    case 'edit_file':
-      const content = String(input.content || input.new_content || '');
-      const path = String(input.path || input.file_path || '');
-      return (
-        <div className="space-y-2">
-          <div className="text-sm">
-            <span className="text-gray-500">{name === 'write_file' ? 'Writing to' : 'Editing'}: </span>
-            <span className="font-mono text-blue-600">{path}</span>
-          </div>
-          {content && (
-            <CodeViewer
-              code={content}
-              language={getLanguageFromPath(path)}
-              maxHeight={200}
-            />
-          )}
-        </div>
-      );
+  return (
+    <div className="space-y-3">
+      {/* Agent type */}
+      <div className="flex items-center gap-2">
+        <Users className="w-4 h-4 text-indigo-500" />
+        <span className="font-medium text-indigo-700">{subagentType}</span>
+        {model && (
+          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-xs rounded">
+            {model}
+          </span>
+        )}
+        {runInBackground && (
+          <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded">
+            Background
+          </span>
+        )}
+      </div>
 
-    default:
-      return <GenericToolInput input={input} />;
-  }
+      {/* Description */}
+      {description && (
+        <div className="text-sm text-gray-600">
+          {description}
+        </div>
+      )}
+
+      {/* Prompt preview */}
+      {prompt && (
+        <details className="text-sm">
+          <summary className="cursor-pointer text-blue-600 hover:text-blue-700">
+            <FileText className="w-4 h-4 inline mr-1" />
+            Show prompt ({prompt.length} chars)
+          </summary>
+          <pre className="mt-2 p-3 bg-gray-50 rounded text-xs overflow-x-auto whitespace-pre-wrap">
+            {prompt}
+          </pre>
+        </details>
+      )}
+    </div>
+  );
 };
+```
 
-const GenericToolInput: FC<{ input: Record<string, unknown> }> = ({ input }) => {
+### Generic Fallback Renderer
+
+```tsx
+// dashboard/src/components/ui/tools/ToolInputGeneric.tsx
+import { type FC, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+export const ToolInputGeneric: FC<{ input: Record<string, unknown> }> = ({ input }) => {
   const entries = Object.entries(input);
 
   if (entries.length === 0) {
     return <span className="text-gray-400 text-sm italic">No parameters</span>;
   }
 
+  // Show first 3 params, rest in expandable section
+  const visibleParams = entries.slice(0, 3);
+  const hiddenParams = entries.slice(3);
+  const [showAll, setShowAll] = useState(false);
+
   return (
     <div className="space-y-2">
-      {entries.map(([key, value]) => (
-        <div key={key} className="text-sm">
-          <span className="text-gray-500">{key}: </span>
-          <ToolInputValue value={value} />
-        </div>
+      {visibleParams.map(([key, value]) => (
+        <ParamRow key={key} name={key} value={value} />
       ))}
+
+      {hiddenParams.length > 0 && (
+        <>
+          {showAll && hiddenParams.map(([key, value]) => (
+            <ParamRow key={key} name={key} value={value} />
+          ))}
+          <button
+            onClick={() => setShowAll(!showAll)}
+            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+          >
+            <ChevronDown className={cn("w-3 h-3 transition-transform", showAll && "rotate-180")} />
+            {showAll ? 'Show less' : `Show ${hiddenParams.length} more parameters`}
+          </button>
+        </>
+      )}
     </div>
   );
 };
 
-const ToolInputValue: FC<{ value: unknown }> = ({ value }) => {
+const ParamRow: FC<{ name: string; value: unknown }> = ({ name, value }) => {
+  return (
+    <div className="text-sm">
+      <span className="text-gray-500 mr-2">{name}:</span>
+      <ParamValue value={value} />
+    </div>
+  );
+};
+
+const ParamValue: FC<{ value: unknown }> = ({ value }) => {
+  if (value === null || value === undefined) {
+    return <span className="text-gray-400 italic">null</span>;
+  }
+
+  if (typeof value === 'boolean') {
+    return (
+      <span className={value ? 'text-green-600' : 'text-red-600'}>
+        {String(value)}
+      </span>
+    );
+  }
+
+  if (typeof value === 'number') {
+    return <span className="text-cyan-600 font-mono">{value}</span>;
+  }
+
   if (typeof value === 'string') {
     // Truncate long strings
-    if (value.length > 200 || value.includes('\n')) {
+    if (value.length > 100 || value.includes('\n')) {
       return (
         <details className="inline">
           <summary className="cursor-pointer text-blue-600">
-            Show content ({value.length} chars)
+            String ({value.length} chars)
           </summary>
-          <pre className="mt-1 p-2 bg-gray-100 rounded text-xs overflow-x-auto">
+          <pre className="mt-1 p-2 bg-gray-50 rounded text-xs overflow-x-auto whitespace-pre-wrap max-h-48">
             {value}
           </pre>
         </details>
       );
     }
-    return <span className="font-mono">{value}</span>;
+    return <span className="font-mono text-amber-700">"{value}"</span>;
   }
 
   if (typeof value === 'object') {
+    const json = JSON.stringify(value, null, 2);
     return (
       <details className="inline">
         <summary className="cursor-pointer text-blue-600">
-          Show object ({Object.keys(value as object).length} properties)
+          {Array.isArray(value) ? `Array (${value.length})` : `Object (${Object.keys(value).length} keys)`}
         </summary>
-        <pre className="mt-1 p-2 bg-gray-100 rounded text-xs overflow-x-auto">
-          {JSON.stringify(value, null, 2)}
+        <pre className="mt-1 p-2 bg-gray-50 rounded text-xs overflow-x-auto max-h-48">
+          {json}
         </pre>
       </details>
     );
@@ -528,722 +948,510 @@ const ToolInputValue: FC<{ value: unknown }> = ({ value }) => {
 
   return <span className="font-mono">{String(value)}</span>;
 };
+```
 
-function getLanguageFromPath(path: string): string {
-  const ext = path.split('.').pop()?.toLowerCase() || '';
-  const languageMap: Record<string, string> = {
-    ts: 'typescript', tsx: 'typescript',
-    js: 'javascript', jsx: 'javascript',
-    py: 'python',
-    go: 'go',
-    rs: 'rust',
-    md: 'markdown',
-    json: 'json',
-    yaml: 'yaml', yml: 'yaml',
-    sh: 'bash', bash: 'bash',
-    css: 'css', scss: 'css',
-    html: 'html',
-    sql: 'sql',
-  };
-  return languageMap[ext] || 'text';
+---
+
+## Topic 2: Tool Result Display
+
+Enhance the `ToolResultContent` component from Phase 2 with smarter content detection.
+
+### Enhanced Content Type Detection
+
+```tsx
+// dashboard/src/components/ui/tools/ToolResultContent.tsx
+// Enhance the existing component with better detection
+
+// Add these detection functions:
+
+interface ContentAnalysis {
+  type: 'code' | 'json' | 'file_list' | 'error' | 'table' | 'text';
+  language?: string;
+  metadata?: Record<string, unknown>;
+}
+
+function analyzeContent(content: string): ContentAnalysis {
+  const trimmed = content.trim();
+
+  // Error detection
+  if (
+    trimmed.startsWith('Error:') ||
+    trimmed.startsWith('error:') ||
+    /^(ENOENT|EACCES|EPERM|EEXIST)/.test(trimmed) ||
+    trimmed.includes('Permission denied') ||
+    trimmed.includes('No such file or directory')
+  ) {
+    return { type: 'error' };
+  }
+
+  // JSON detection
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      JSON.parse(trimmed);
+      return { type: 'json' };
+    } catch {
+      // Not valid JSON, continue checking
+    }
+  }
+
+  // File list (from glob/find)
+  if (isFileList(trimmed)) {
+    return { type: 'file_list' };
+  }
+
+  // Code with line numbers (cat -n format)
+  if (/^\s*\d+[→\t]/.test(trimmed)) {
+    const language = detectLanguageFromContent(trimmed);
+    return { type: 'code', language };
+  }
+
+  // Code by content patterns
+  if (hasCodePatterns(trimmed)) {
+    const language = detectLanguageFromContent(trimmed);
+    return { type: 'code', language };
+  }
+
+  // Table format (from ls -la, ps, etc.)
+  if (isTableFormat(trimmed)) {
+    return { type: 'table' };
+  }
+
+  return { type: 'text' };
+}
+
+function isFileList(content: string): boolean {
+  const lines = content.split('\n').filter(l => l.trim());
+  if (lines.length < 2) return false;
+
+  // Check if most lines look like file paths
+  const pathLikeLines = lines.filter(line =>
+    /^\.?\//.test(line) ||  // Starts with / or ./
+    /\.(ts|tsx|js|jsx|py|go|rs|md|json|yaml|yml|toml|txt|css|html)$/.test(line) ||
+    /^[a-zA-Z0-9_-]+\//.test(line)  // Looks like relative path
+  );
+
+  return pathLikeLines.length >= lines.length * 0.7;
+}
+
+function isTableFormat(content: string): boolean {
+  const lines = content.split('\n').filter(l => l.trim());
+  if (lines.length < 2) return false;
+
+  // Check for consistent column structure (multiple whitespace-separated columns)
+  const columnCounts = lines.map(line =>
+    line.trim().split(/\s{2,}/).length
+  );
+
+  const avgColumns = columnCounts.reduce((a, b) => a + b, 0) / columnCounts.length;
+  return avgColumns >= 3 && columnCounts.every(c => Math.abs(c - avgColumns) <= 2);
+}
+
+function hasCodePatterns(content: string): boolean {
+  const patterns = [
+    /^(import|from|export|const|let|var|function|class|def|func|package)\s/m,
+    /[{}\[\]];?\s*$/m,
+    /^\s*(if|for|while|return|throw|try|catch)\s*[\(\{]/m,
+    /=>\s*[{\(]/,
+    /\bexport\s+(default\s+)?/,
+    /^#!/,  // Shebang
+  ];
+  return patterns.some(p => p.test(content));
+}
+
+function detectLanguageFromContent(content: string): string {
+  // Python indicators
+  if (/^(def|class|import|from)\s/.test(content) || /:\s*$/.test(content.split('\n')[0] || '')) {
+    return 'python';
+  }
+
+  // Go indicators
+  if (/^(func|package|import)\s/.test(content) || /\bfmt\./.test(content)) {
+    return 'go';
+  }
+
+  // Rust indicators
+  if (/^(fn|use|mod|impl|struct|enum)\s/.test(content) || /\bmut\s/.test(content)) {
+    return 'rust';
+  }
+
+  // TypeScript/JavaScript (most common in this context)
+  if (/^(const|let|var|function|class|interface|type)\s/.test(content)) {
+    return 'typescript';
+  }
+
+  // Bash
+  if (/^#!/.test(content) || /\$\{?\w+\}?/.test(content)) {
+    return 'bash';
+  }
+
+  return 'text';
 }
 ```
 
-### ToolResultContent.tsx - Tool Result Display
+### File List Renderer
 
 ```tsx
-// dashboard/src/components/ui/ToolResultContent.tsx
-import { type FC, useState, useMemo } from 'react';
-import { CheckCircle, XCircle, ChevronDown } from 'lucide-react';
+// dashboard/src/components/ui/tools/FileListContent.tsx
+import { type FC, useState } from 'react';
+import { File, Folder, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { CodeViewer } from './CodeViewer';
-import { MessageContent } from './MessageContent';
 
-interface ToolResultContentProps {
-  toolUseId: string;
-  content: string | ContentBlock[];
-  isError?: boolean;
+interface FileListContentProps {
+  content: string;
 }
 
-interface ContentBlock {
-  type: string;
-  [key: string]: unknown;
-}
+export const FileListContent: FC<FileListContentProps> = ({ content }) => {
+  const files = content.split('\n').filter(line => line.trim());
 
-export const ToolResultContent: FC<ToolResultContentProps> = ({
-  toolUseId,
-  content,
-  isError = false
-}) => {
-  const [expanded, setExpanded] = useState(!isError); // Collapse errors by default
-
-  // Detect content type
-  const { contentType, processedContent } = useMemo(() => {
-    if (typeof content !== 'string') {
-      return { contentType: 'blocks' as const, processedContent: content };
-    }
-
-    // Detect code (cat -n format with line numbers)
-    if (/^\s*\d+[→\t]/.test(content)) {
-      return {
-        contentType: 'code' as const,
-        processedContent: extractCodeFromCatN(content)
-      };
-    }
-
-    // Detect JSON
-    if (content.trim().startsWith('{') || content.trim().startsWith('[')) {
-      try {
-        JSON.parse(content);
-        return { contentType: 'json' as const, processedContent: content };
-      } catch {
-        // Not valid JSON
-      }
-    }
-
-    // Detect code by keywords
-    if (hasCodeIndicators(content)) {
-      return { contentType: 'code' as const, processedContent: content };
-    }
-
-    return { contentType: 'text' as const, processedContent: content };
-  }, [content]);
-
-  const bgColor = isError
-    ? 'bg-gradient-to-r from-red-50 to-rose-50'
-    : 'bg-gradient-to-r from-emerald-50 to-green-50';
-
-  const borderColor = isError ? 'border-red-200' : 'border-emerald-200';
+  // Group by directory
+  const grouped = groupByDirectory(files);
 
   return (
-    <div className={cn("border rounded-lg overflow-hidden", borderColor, bgColor)}>
-      {/* Header */}
-      <div
-        className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-white/50 transition-colors"
-        onClick={() => setExpanded(!expanded)}
-      >
-        <div className="flex items-center gap-2">
-          {isError ? (
-            <XCircle className="w-4 h-4 text-red-500" />
-          ) : (
-            <CheckCircle className="w-4 h-4 text-emerald-500" />
+    <div className="text-sm font-mono space-y-1 max-h-64 overflow-y-auto">
+      {files.length <= 20 ? (
+        // Simple list for small results
+        files.map((file, i) => <FileRow key={i} path={file} />)
+      ) : (
+        // Grouped view for large results
+        <GroupedFileView groups={grouped} />
+      )}
+      <div className="text-xs text-gray-400 pt-2 border-t">
+        {files.length} files
+      </div>
+    </div>
+  );
+};
+
+const FileRow: FC<{ path: string }> = ({ path }) => {
+  const isDirectory = path.endsWith('/');
+  const name = path.split('/').pop() || path;
+
+  return (
+    <div className="flex items-center gap-2 py-0.5 hover:bg-gray-50 rounded px-1">
+      {isDirectory ? (
+        <Folder className="w-4 h-4 text-blue-500" />
+      ) : (
+        <File className="w-4 h-4 text-gray-400" />
+      )}
+      <span className={cn(
+        isDirectory ? 'text-blue-600' : 'text-gray-700'
+      )}>
+        {path}
+      </span>
+    </div>
+  );
+};
+
+const GroupedFileView: FC<{ groups: Record<string, string[]> }> = ({ groups }) => {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const toggleDir = (dir: string) => {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(dir)) {
+        next.delete(dir);
+      } else {
+        next.add(dir);
+      }
+      return next;
+    });
+  };
+
+  return (
+    <div className="space-y-1">
+      {Object.entries(groups).map(([dir, files]) => (
+        <div key={dir}>
+          <button
+            onClick={() => toggleDir(dir)}
+            className="flex items-center gap-2 w-full text-left py-0.5 hover:bg-gray-50 rounded px-1"
+          >
+            <ChevronRight
+              className={cn(
+                "w-3 h-3 text-gray-400 transition-transform",
+                expanded.has(dir) && "rotate-90"
+              )}
+            />
+            <Folder className="w-4 h-4 text-blue-500" />
+            <span className="text-blue-600">{dir}/</span>
+            <span className="text-gray-400 text-xs">({files.length})</span>
+          </button>
+          {expanded.has(dir) && (
+            <div className="ml-6 border-l border-gray-200 pl-2">
+              {files.map((file, i) => (
+                <FileRow key={i} path={file} />
+              ))}
+            </div>
           )}
-          <span className={cn(
-            "font-medium",
-            isError ? "text-red-700" : "text-emerald-700"
-          )}>
-            {isError ? 'Error' : 'Result'}
-          </span>
-          <span className="text-xs text-gray-400 font-mono">
-            {toolUseId.slice(-8)}
-          </span>
-          <span className="text-xs text-gray-400 px-2 py-0.5 bg-white/50 rounded">
-            {contentType}
-          </span>
         </div>
-        <ChevronDown
-          className={cn(
-            "w-4 h-4 text-gray-400 transition-transform",
-            expanded && "rotate-180"
-          )}
+      ))}
+    </div>
+  );
+};
+
+function groupByDirectory(files: string[]): Record<string, string[]> {
+  const groups: Record<string, string[]> = {};
+
+  for (const file of files) {
+    const parts = file.split('/');
+    const dir = parts.length > 1 ? parts.slice(0, -1).join('/') : '.';
+    const name = parts.pop() || file;
+
+    if (!groups[dir]) {
+      groups[dir] = [];
+    }
+    groups[dir].push(name);
+  }
+
+  return groups;
+}
+```
+
+---
+
+## Topic 3: Image Content Display
+
+### ImageContent.tsx
+
+```tsx
+// dashboard/src/components/ui/ImageContent.tsx
+import { type FC, useState } from 'react';
+import { Image as ImageIcon, Download, Maximize2, X, AlertCircle } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+interface ImageSource {
+  type: 'base64';
+  media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+  data: string;
+}
+
+interface ImageContentProps {
+  source: ImageSource;
+  alt?: string;
+  maxHeight?: number;
+}
+
+export const ImageContent: FC<ImageContentProps> = ({
+  source,
+  alt = 'Image content',
+  maxHeight = 400,
+}) => {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+
+  // Construct data URI
+  const dataUri = `data:${source.media_type};base64,${source.data}`;
+
+  // Get file extension for download
+  const extension = source.media_type.split('/')[1] || 'png';
+
+  const handleDownload = () => {
+    const link = document.createElement('a');
+    link.href = dataUri;
+    link.download = `image.${extension}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  if (loadError) {
+    return (
+      <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+        <AlertCircle className="w-5 h-5" />
+        <div>
+          <div className="font-medium">Failed to load image</div>
+          <div className="text-sm text-red-600">
+            Format: {source.media_type} | Size: {Math.round(source.data.length / 1024)}KB base64
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* Main image display */}
+      <div className="relative group rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+        {/* Image info badge */}
+        <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 px-2 py-1 bg-black/60 text-white text-xs rounded">
+          <ImageIcon className="w-3 h-3" />
+          <span>{source.media_type.split('/')[1].toUpperCase()}</span>
+        </div>
+
+        {/* Control buttons */}
+        <div className="absolute top-2 right-2 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={() => setLightboxOpen(true)}
+            className="p-1.5 bg-black/60 text-white rounded hover:bg-black/80 transition-colors"
+            title="View fullscreen"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={handleDownload}
+            className="p-1.5 bg-black/60 text-white rounded hover:bg-black/80 transition-colors"
+            title="Download image"
+          >
+            <Download className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* The image */}
+        <img
+          src={dataUri}
+          alt={alt}
+          onError={() => setLoadError(true)}
+          className="w-full object-contain cursor-zoom-in"
+          style={{ maxHeight }}
+          onClick={() => setLightboxOpen(true)}
         />
       </div>
 
-      {/* Content */}
-      {expanded && (
-        <div className="px-4 py-3 border-t bg-white/50">
-          <ToolResultBody
-            contentType={contentType}
-            content={processedContent}
-            isError={isError}
-          />
-        </div>
-      )}
-    </div>
-  );
-};
-
-const ToolResultBody: FC<{
-  contentType: 'text' | 'code' | 'json' | 'blocks';
-  content: string | ContentBlock[];
-  isError: boolean;
-}> = ({ contentType, content, isError }) => {
-  if (contentType === 'blocks') {
-    return <MessageContent content={content as ContentBlock[]} />;
-  }
-
-  const text = content as string;
-
-  // Truncate very long content
-  const MAX_LENGTH = 500;
-  const [showFull, setShowFull] = useState(text.length <= MAX_LENGTH);
-  const displayText = showFull ? text : text.slice(0, MAX_LENGTH);
-
-  switch (contentType) {
-    case 'code':
-      return (
-        <div>
-          <CodeViewer code={displayText} language="text" maxHeight={300} />
-          {!showFull && (
-            <button
-              onClick={() => setShowFull(true)}
-              className="mt-2 text-sm text-blue-600 hover:underline"
-            >
-              Show full content ({text.length} chars)
-            </button>
-          )}
-        </div>
-      );
-
-    case 'json':
-      return (
-        <pre className="p-3 bg-gray-900 text-gray-100 rounded text-xs overflow-x-auto">
-          {JSON.stringify(JSON.parse(text), null, 2)}
-        </pre>
-      );
-
-    default:
-      return (
-        <div className={cn(
-          "text-sm whitespace-pre-wrap",
-          isError && "text-red-600"
-        )}>
-          {displayText}
-          {!showFull && (
-            <>
-              <span className="text-gray-400">...</span>
-              <button
-                onClick={() => setShowFull(true)}
-                className="ml-2 text-blue-600 hover:underline"
-              >
-                Show more
-              </button>
-            </>
-          )}
-        </div>
-      );
-  }
-};
-
-// Extract code from cat -n format (line numbers with arrow or tab)
-function extractCodeFromCatN(text: string): string {
-  return text
-    .split('\n')
-    .map(line => {
-      // Match: "   123→content" or "   123\tcontent"
-      const match = line.match(/^\s*\d+[→\t](.*)$/);
-      return match ? match[1] : line;
-    })
-    .join('\n');
-}
-
-// Detect if content looks like code
-function hasCodeIndicators(text: string): boolean {
-  const codePatterns = [
-    /^(import|from|const|let|var|function|class|def|func|package)\s/m,
-    /[{}\[\]];?\s*$/m,
-    /^\s*(if|for|while|return|throw)\s*\(/m,
-    /=>\s*{/,
-    /\bexport\s+(default\s+)?/,
-  ];
-  return codePatterns.some(pattern => pattern.test(text));
-}
-```
-
----
-
-## Topic 2: Code Viewer with Syntax Highlighting
-
-### What You're Building
-
-A syntax-highlighted code viewer with:
-- Custom single-pass syntax highlighting (no external library)
-- Line numbers
-- Language detection from filename
-- Copy button
-- Optional fullscreen mode
-- Download button
-
-### CodeViewer.tsx
-
-```tsx
-// dashboard/src/components/ui/CodeViewer.tsx
-import { type FC, useState, useMemo, useRef } from 'react';
-import { Copy, Check, Download, Maximize2, X } from 'lucide-react';
-import { cn } from '@/lib/utils';
-
-interface CodeViewerProps {
-  code: string;
-  language?: string;
-  filename?: string;
-  maxHeight?: number;
-  showLineNumbers?: boolean;
-  showControls?: boolean;
-}
-
-export const CodeViewer: FC<CodeViewerProps> = ({
-  code,
-  language: providedLanguage,
-  filename,
-  maxHeight = 400,
-  showLineNumbers = true,
-  showControls = true,
-}) => {
-  const [copied, setCopied] = useState(false);
-  const [fullscreen, setFullscreen] = useState(false);
-  const codeRef = useRef<HTMLPreElement>(null);
-
-  // Determine language from filename or provided value
-  const language = useMemo(() => {
-    if (providedLanguage) return providedLanguage;
-    if (filename) return getLanguageFromFilename(filename);
-    return 'text';
-  }, [providedLanguage, filename]);
-
-  // Apply syntax highlighting
-  const highlightedLines = useMemo(() => {
-    const lines = code.split('\n');
-    return lines.map(line => highlightLine(line, language));
-  }, [code, language]);
-
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleDownload = () => {
-    const blob = new Blob([code], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename || `code.${getExtension(language)}`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const codeContent = (
-    <div className={cn(
-      "relative bg-gray-900 rounded-lg overflow-hidden",
-      fullscreen && "fixed inset-4 z-50 flex flex-col"
-    )}>
-      {/* Header with controls */}
-      {showControls && (
-        <div className="flex items-center justify-between px-4 py-2 bg-gray-800 text-gray-400 text-xs">
-          <div className="flex items-center gap-2">
-            {filename && <span className="font-mono">{filename}</span>}
-            <span className="px-2 py-0.5 bg-gray-700 rounded">{language}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleCopy}
-              className="p-1.5 hover:bg-gray-700 rounded transition-colors"
-              title="Copy to clipboard"
-            >
-              {copied ? (
-                <Check className="w-4 h-4 text-green-400" />
-              ) : (
-                <Copy className="w-4 h-4" />
-              )}
-            </button>
-            <button
-              onClick={handleDownload}
-              className="p-1.5 hover:bg-gray-700 rounded transition-colors"
-              title="Download file"
-            >
-              <Download className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setFullscreen(!fullscreen)}
-              className="p-1.5 hover:bg-gray-700 rounded transition-colors"
-              title={fullscreen ? "Exit fullscreen" : "Fullscreen"}
-            >
-              {fullscreen ? (
-                <X className="w-4 h-4" />
-              ) : (
-                <Maximize2 className="w-4 h-4" />
-              )}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Code content */}
-      <pre
-        ref={codeRef}
-        className={cn(
-          "overflow-auto text-sm leading-relaxed",
-          fullscreen ? "flex-1" : ""
-        )}
-        style={{ maxHeight: fullscreen ? undefined : maxHeight }}
-      >
-        <table className="w-full border-collapse">
-          <tbody>
-            {highlightedLines.map((html, i) => (
-              <tr key={i} className="hover:bg-gray-800/50">
-                {showLineNumbers && (
-                  <td className="select-none text-right pr-4 pl-4 text-gray-500 border-r border-gray-700 align-top">
-                    {i + 1}
-                  </td>
-                )}
-                <td
-                  className="pl-4 pr-4 text-gray-100"
-                  dangerouslySetInnerHTML={{ __html: html || '&nbsp;' }}
-                />
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </pre>
-    </div>
-  );
-
-  // Fullscreen backdrop
-  if (fullscreen) {
-    return (
-      <>
-        <div
-          className="fixed inset-0 bg-black/80 z-40"
-          onClick={() => setFullscreen(false)}
+      {/* Lightbox */}
+      {lightboxOpen && (
+        <Lightbox
+          src={dataUri}
+          alt={alt}
+          onClose={() => setLightboxOpen(false)}
+          onDownload={handleDownload}
         />
-        {codeContent}
-      </>
-    );
-  }
-
-  return codeContent;
+      )}
+    </>
+  );
 };
 
-// Syntax highlighting - single pass, no external dependencies
-function highlightLine(line: string, language: string): string {
-  let result = escapeHtml(line);
-
-  // Don't highlight plain text
-  if (language === 'text') return result;
-
-  // Order matters! Apply patterns from most to least specific
-
-  // 1. Strings (double quotes, single quotes, backticks)
-  result = result.replace(
-    /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g,
-    '<span class="text-amber-300">$1</span>'
-  );
-
-  // 2. Comments
-  result = result.replace(
-    /(\/\/.*$|#.*$)/gm,
-    '<span class="text-gray-500 italic">$1</span>'
-  );
-
-  // 3. Keywords (language-specific)
-  const keywords = getKeywords(language);
-  if (keywords.length > 0) {
-    const keywordPattern = new RegExp(
-      `\\b(${keywords.join('|')})\\b(?![^<]*>)`,
-      'g'
-    );
-    result = result.replace(
-      keywordPattern,
-      '<span class="text-purple-400">$1</span>'
-    );
-  }
-
-  // 4. Literals (true, false, null, undefined, None, etc.)
-  result = result.replace(
-    /\b(true|false|null|undefined|None|True|False|nil)\b(?![^<]*>)/g,
-    '<span class="text-orange-400">$1</span>'
-  );
-
-  // 5. Numbers
-  result = result.replace(
-    /\b(\d+\.?\d*)\b(?![^<]*>)/g,
-    '<span class="text-cyan-300">$1</span>'
-  );
-
-  // 6. PascalCase identifiers (likely types/classes)
-  result = result.replace(
-    /\b([A-Z][a-zA-Z0-9]*)\b(?![^<]*>)/g,
-    '<span class="text-yellow-200">$1</span>'
-  );
-
-  return result;
+// Lightbox component for fullscreen view
+interface LightboxProps {
+  src: string;
+  alt: string;
+  onClose: () => void;
+  onDownload: () => void;
 }
 
-function getKeywords(language: string): string[] {
-  const keywordSets: Record<string, string[]> = {
-    javascript: ['const', 'let', 'var', 'function', 'class', 'extends', 'return', 'if', 'else', 'for', 'while', 'switch', 'case', 'break', 'continue', 'import', 'export', 'default', 'from', 'async', 'await', 'try', 'catch', 'throw', 'new', 'this', 'typeof', 'instanceof'],
-    typescript: ['const', 'let', 'var', 'function', 'class', 'extends', 'return', 'if', 'else', 'for', 'while', 'switch', 'case', 'break', 'continue', 'import', 'export', 'default', 'from', 'async', 'await', 'try', 'catch', 'throw', 'new', 'this', 'typeof', 'instanceof', 'interface', 'type', 'enum', 'implements', 'private', 'public', 'protected', 'readonly'],
-    python: ['def', 'class', 'return', 'if', 'elif', 'else', 'for', 'while', 'try', 'except', 'finally', 'raise', 'import', 'from', 'as', 'with', 'lambda', 'yield', 'assert', 'pass', 'break', 'continue', 'global', 'nonlocal', 'async', 'await'],
-    go: ['func', 'package', 'import', 'var', 'const', 'type', 'struct', 'interface', 'map', 'chan', 'go', 'defer', 'return', 'if', 'else', 'for', 'range', 'switch', 'case', 'default', 'break', 'continue', 'fallthrough', 'select'],
-    rust: ['fn', 'let', 'mut', 'const', 'struct', 'enum', 'impl', 'trait', 'pub', 'mod', 'use', 'return', 'if', 'else', 'for', 'while', 'loop', 'match', 'break', 'continue', 'async', 'await', 'move', 'ref', 'self', 'Self', 'where'],
-    bash: ['if', 'then', 'else', 'elif', 'fi', 'for', 'while', 'do', 'done', 'case', 'esac', 'function', 'return', 'exit', 'export', 'local', 'readonly', 'declare', 'unset', 'source', 'alias'],
-  };
-
-  return keywordSets[language] || keywordSets.javascript || [];
-}
-
-function getLanguageFromFilename(filename: string): string {
-  const ext = filename.split('.').pop()?.toLowerCase() || '';
-  const languageMap: Record<string, string> = {
-    ts: 'typescript', tsx: 'typescript', mts: 'typescript', cts: 'typescript',
-    js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
-    py: 'python', pyw: 'python',
-    go: 'go',
-    rs: 'rust',
-    md: 'markdown', mdx: 'markdown',
-    json: 'json', jsonc: 'json',
-    yaml: 'yaml', yml: 'yaml',
-    sh: 'bash', bash: 'bash', zsh: 'bash',
-    css: 'css', scss: 'css', sass: 'css', less: 'css',
-    html: 'html', htm: 'html',
-    sql: 'sql',
-    dockerfile: 'docker',
-    makefile: 'make',
-    toml: 'toml',
-    xml: 'xml',
-  };
-  return languageMap[ext] || 'text';
-}
-
-function getExtension(language: string): string {
-  const extMap: Record<string, string> = {
-    typescript: 'ts',
-    javascript: 'js',
-    python: 'py',
-    go: 'go',
-    rust: 'rs',
-    bash: 'sh',
-    json: 'json',
-    yaml: 'yaml',
-    markdown: 'md',
-    html: 'html',
-    css: 'css',
-    sql: 'sql',
-  };
-  return extMap[language] || 'txt';
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-```
-
----
-
-## Topic 3: Copy-to-Clipboard
-
-### What You're Building
-
-A reusable hook and button component for copying content with visual feedback.
-
-### useCopyToClipboard.ts
-
-```tsx
-// dashboard/src/lib/hooks/useCopyToClipboard.ts
-import { useState, useCallback } from 'react';
-
-interface UseCopyToClipboardReturn {
-  copied: boolean;
-  copy: (text: string) => Promise<void>;
-  reset: () => void;
-}
-
-export function useCopyToClipboard(resetDelay = 2000): UseCopyToClipboardReturn {
-  const [copied, setCopied] = useState(false);
-
-  const copy = useCallback(async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), resetDelay);
-    } catch (error) {
-      console.error('Failed to copy:', error);
-      // Fallback for older browsers
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = '0';
-      document.body.appendChild(textarea);
-      textarea.select();
-      try {
-        document.execCommand('copy');
-        setCopied(true);
-        setTimeout(() => setCopied(false), resetDelay);
-      } finally {
-        document.body.removeChild(textarea);
+const Lightbox: FC<LightboxProps> = ({ src, alt, onClose, onDownload }) => {
+  // Close on escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
       }
-    }
-  }, [resetDelay]);
-
-  const reset = useCallback(() => setCopied(false), []);
-
-  return { copied, copy, reset };
-}
-```
-
-### CopyButton.tsx
-
-```tsx
-// dashboard/src/components/ui/CopyButton.tsx
-import { type FC } from 'react';
-import { Copy, Check } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { useCopyToClipboard } from '@/lib/hooks/useCopyToClipboard';
-
-interface CopyButtonProps {
-  content: string;
-  className?: string;
-  size?: 'sm' | 'md' | 'lg';
-  variant?: 'default' | 'ghost' | 'outline';
-  label?: string;
-}
-
-export const CopyButton: FC<CopyButtonProps> = ({
-  content,
-  className,
-  size = 'sm',
-  variant = 'ghost',
-  label,
-}) => {
-  const { copied, copy } = useCopyToClipboard();
-
-  const sizeClasses = {
-    sm: 'p-1.5',
-    md: 'p-2',
-    lg: 'p-2.5',
-  };
-
-  const iconSizes = {
-    sm: 'w-3.5 h-3.5',
-    md: 'w-4 h-4',
-    lg: 'w-5 h-5',
-  };
-
-  const variantClasses = {
-    default: 'bg-gray-200 hover:bg-gray-300 text-gray-700',
-    ghost: 'hover:bg-gray-100 text-gray-500 hover:text-gray-700',
-    outline: 'border border-gray-300 hover:bg-gray-50 text-gray-600',
-  };
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   return (
-    <button
-      onClick={() => copy(content)}
-      className={cn(
-        'inline-flex items-center gap-1.5 rounded transition-colors',
-        sizeClasses[size],
-        variantClasses[variant],
-        className
-      )}
-      title={copied ? 'Copied!' : 'Copy to clipboard'}
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
+      onClick={onClose}
     >
-      {copied ? (
-        <Check className={cn(iconSizes[size], 'text-green-500')} />
-      ) : (
-        <Copy className={iconSizes[size]} />
-      )}
-      {label && <span className="text-xs">{label}</span>}
-    </button>
+      {/* Controls */}
+      <div className="absolute top-4 right-4 flex gap-2 z-10">
+        <button
+          onClick={(e) => { e.stopPropagation(); onDownload(); }}
+          className="p-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors"
+          title="Download"
+        >
+          <Download className="w-5 h-5" />
+        </button>
+        <button
+          onClick={onClose}
+          className="p-2 bg-white/20 text-white rounded-lg hover:bg-white/30 transition-colors"
+          title="Close"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* Image */}
+      <img
+        src={src}
+        alt={alt}
+        className="max-w-[90vw] max-h-[90vh] object-contain"
+        onClick={(e) => e.stopPropagation()}
+      />
+    </div>
   );
 };
-```
 
----
-
-## Integration Points
-
-### Where to Use These Components
-
-1. **Requests.tsx** - Replace raw JSON display with MessageContent
-2. **ConversationDetail** - Use MessageContent for conversation messages
-3. **Request Headers** - Use CopyButton for copying header values
-4. **Request/Response JSON** - Use CopyButton for full JSON copy
-
-### Example Integration in Requests.tsx
-
-```tsx
-// In the request detail panel, replace:
-<pre>{JSON.stringify(request.body, null, 2)}</pre>
-
-// With:
-<MessageContent
-  content={request.body.messages || []}
-  showSystemReminders={false}
-/>
+// Don't forget the import at the top
+import { useEffect } from 'react';
 ```
 
 ---
 
 ## Testing Checklist
 
-### Message Content Parser
-- [ ] Renders plain text content
-- [ ] Renders array of text blocks
-- [ ] Renders tool_use blocks with all parameter types
-- [ ] Renders tool_result blocks (success and error)
-- [ ] Renders image blocks (base64)
-- [ ] Extracts and hides system-reminder tags
-- [ ] Extracts and displays function blocks
-- [ ] Falls back gracefully for unknown block types
-- [ ] Handles nested content in tool results
+### Tool Use Display
+- [ ] BashTool shows command with proper formatting
+- [ ] ReadTool shows file path and optional line range
+- [ ] WriteTool shows file path and content preview
+- [ ] EditTool shows side-by-side diff (old vs new)
+- [ ] GlobTool shows pattern and optional path
+- [ ] GrepTool shows regex pattern and options
+- [ ] TaskTool shows agent type, description, and prompt preview
+- [ ] TodoWriteTool shows formatted todo list with status grouping
+- [ ] Generic fallback handles unknown tools gracefully
+- [ ] Expand/collapse works on all tools
+- [ ] Tool ID copy button works
+- [ ] Execution indicator shows pulsing animation
 
-### Code Viewer
-- [ ] Shows line numbers correctly
-- [ ] Highlights syntax for JavaScript/TypeScript
-- [ ] Highlights syntax for Python
-- [ ] Highlights syntax for Go
-- [ ] Copy button works and shows feedback
-- [ ] Download button triggers file download
-- [ ] Fullscreen mode works
-- [ ] Language detection from filename works
-- [ ] Handles very long files (performance)
+### Tool Result Display
+- [ ] Detects and renders code content correctly
+- [ ] Detects and renders JSON content correctly
+- [ ] Detects and renders file lists correctly
+- [ ] Detects and renders error content correctly
+- [ ] Truncates long content with "Show more" button
+- [ ] Error results show red styling
+- [ ] Success results show green styling
 
-### Copy to Clipboard
-- [ ] Copy works in modern browsers
-- [ ] Fallback works for older browsers
-- [ ] Visual feedback shows for 2 seconds
-- [ ] Multiple copy buttons track state independently
+### Image Content
+- [ ] Renders base64 JPEG images
+- [ ] Renders base64 PNG images
+- [ ] Renders base64 GIF images
+- [ ] Download button works
+- [ ] Lightbox opens on click
+- [ ] Lightbox closes on Escape key
+- [ ] Lightbox closes on backdrop click
+- [ ] Error state shows helpful message
 
 ---
 
 ## Common Gotchas
 
-1. **XSS Prevention**: Always escape HTML before inserting into DOM with dangerouslySetInnerHTML
-2. **Content Type Detection**: The order of checks matters - check most specific patterns first
-3. **Performance**: Memoize heavy computations (syntax highlighting, content parsing)
-4. **Keyboard Accessibility**: Copy buttons should be focusable and work with Enter key
-5. **Cat -n Format**: Tool results often contain line numbers like "   1→code" - strip them before display
+1. **Tool Name Casing**: Tools can be `Bash`, `bash`, or `BASH`. Use case-insensitive matching.
+2. **Missing Fields**: Tool inputs may not have all fields. Always use optional chaining.
+3. **Large Content**: Tool results can be megabytes. Always truncate with expandable sections.
+4. **Base64 Images**: Can be very large. Don't render multiple at once without lazy loading.
+5. **Cat -n Format**: Strip line numbers `^\s*\d+[→\t]` before displaying code.
+6. **Nested Tool Results**: Tool results can contain arrays of content blocks recursively.
 
 ---
 
-## Reference Files (in /web directory)
+## Reference Files
 
-Study these files in the old dashboard for patterns:
-- `web/app/components/MessageContent.tsx` - Content rendering logic
-- `web/app/components/CodeViewer.tsx` - Syntax highlighting approach
-- `web/app/components/ToolUse.tsx` - Tool invocation display
-- `web/app/components/ToolResult.tsx` - Result rendering with type detection
-- `web/app/utils/formatters.ts` - Text formatting utilities
+Study these in the old dashboard:
+- `web/app/components/ToolUse.tsx` - Tool invocation patterns
+- `web/app/components/ToolResult.tsx` - Result detection and rendering
+- `web/app/components/ImageContent.tsx` - Image handling
+- `web/app/components/CodeDiff.tsx` - Diff algorithm
+- `web/app/components/TodoList.tsx` - Todo rendering
 
 ---
 
 ## Definition of Done
 
-Phase 2 is complete when:
+Phase 3 is complete when:
 
-1. All three topics are implemented and tested
-2. `MessageContent` correctly renders all Anthropic message types
-3. `CodeViewer` displays code with syntax highlighting and controls
-4. `CopyButton` provides consistent copy-to-clipboard across the app
-5. `Requests.tsx` uses these components instead of raw JSON
-6. No TypeScript errors in strict mode
-7. All components export from `components/ui/index.ts`
-8. Commit history shows logical, atomic commits
+1. All specialized tool renderers work correctly
+2. Generic fallback handles unknown tools gracefully
+3. Tool results detect content types automatically
+4. Image content displays with lightbox and download
+5. All components integrate with Phase 2 components
+6. Expand/collapse state works consistently
+7. No TypeScript errors in strict mode
+8. Components export from appropriate index files
+9. Commit history shows logical, atomic commits
 
 ---
 
-**Good luck, island agent. You've got this.**
+**Build on Phase 2's foundation. Make tools beautiful.**

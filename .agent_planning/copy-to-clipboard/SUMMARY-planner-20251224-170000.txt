@@ -1,0 +1,4 @@
+Agent: status-planner | 2025-12-24-170000
+Topic: copy-to-clipboard
+Files: PLAN-20251224-170000.md, DOD-20251224-170000.md
+Items: 7 (P0: 3, P1: 2, P2: 2)

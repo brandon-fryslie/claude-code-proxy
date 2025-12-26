@@ -1,0 +1,4 @@
+Agent: status-planner | 2025-12-24-170000
+Topic: code-viewer-highlighting
+Files: PLAN-20251224-170000.md, DOD-20251224-170000.md
+Items: 8 (P0: 7, P1: 1)
