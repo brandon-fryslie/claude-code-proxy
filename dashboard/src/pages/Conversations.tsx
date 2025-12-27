@@ -1,61 +1,16 @@
-import { useState } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { PageHeader } from '@/components/layout'
-import { MessageSquare, Clock, Hash } from 'lucide-react'
+import { MessageSquare, ArrowUpDown } from 'lucide-react'
 import { useConversations, useConversationDetail } from '@/lib/api'
-import { cn } from '@/lib/utils'
+import type { ConversationDetail } from '@/lib/types'
 import { ConversationThread } from '@/components/features/ConversationThread'
+import { ConversationSearch } from '@/components/features/ConversationSearch'
+import { ConversationList } from '@/components/features/ConversationList'
+import { filterConversations } from '@/lib/search'
 
-function ConversationListItem({
-  projectName,
-  lastActivity,
-  messageCount,
-  isSelected,
-  onClick,
-}: {
-  projectName: string
-  lastActivity: string
-  messageCount: number
-  isSelected: boolean
-  onClick: () => void
-}) {
-  const formattedDate = new Date(lastActivity).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  })
+type SortOption = 'recent' | 'project' | 'messages'
 
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        'w-full p-3 text-left border-b border-[var(--color-border)]',
-        'hover:bg-[var(--color-bg-hover)] transition-colors',
-        isSelected && 'bg-[var(--color-bg-active)]'
-      )}
-    >
-      <div className="flex items-start justify-between">
-        <div className="flex-1 min-w-0">
-          <h3 className="text-sm font-medium text-[var(--color-text-primary)] truncate">
-            {projectName || 'Unknown Project'}
-          </h3>
-          <div className="flex items-center gap-3 mt-1 text-xs text-[var(--color-text-muted)]">
-            <span className="flex items-center gap-1">
-              <Clock size={10} />
-              {formattedDate}
-            </span>
-            <span className="flex items-center gap-1">
-              <Hash size={10} />
-              {messageCount} messages
-            </span>
-          </div>
-        </div>
-      </div>
-    </button>
-  )
-}
-
-function ConversationDetail({ conversationId }: { conversationId: string | null }) {
+function ConversationDetailPane({ conversationId }: { conversationId: string | null }) {
   const { data: conversation, isLoading } = useConversationDetail(conversationId)
 
   if (!conversationId) {
@@ -94,46 +49,109 @@ function ConversationDetail({ conversationId }: { conversationId: string | null 
 
 export function ConversationsPage() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [sortBy, setSortBy] = useState<SortOption>('recent')
+  const [conversationDetailsCache] = useState<Map<string, ConversationDetail>>(
+    new Map()
+  )
+
   const { data: conversations, isLoading } = useConversations()
+
+  // Update cache when a conversation detail is loaded
+  const handleConversationSelect = useCallback((id: string) => {
+    setSelectedConversationId(id)
+  }, [])
+
+  // Sort conversations
+  const sortedConversations = useMemo(() => {
+    if (!conversations) return []
+
+    const sorted = [...conversations]
+    switch (sortBy) {
+      case 'recent':
+        return sorted.sort((a, b) =>
+          new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
+        )
+      case 'project':
+        return sorted.sort((a, b) =>
+          (a.projectName || '').localeCompare(b.projectName || '')
+        )
+      case 'messages':
+        return sorted.sort((a, b) => b.messageCount - a.messageCount)
+      default:
+        return sorted
+    }
+  }, [conversations, sortBy])
+
+  // Filter by search query
+  const filteredConversations = useMemo(() => {
+    return filterConversations(sortedConversations, conversationDetailsCache, searchQuery)
+  }, [sortedConversations, conversationDetailsCache, searchQuery])
+
+  // Cycle through sort options
+  const cycleSortOption = () => {
+    setSortBy((current) => {
+      if (current === 'recent') return 'project'
+      if (current === 'project') return 'messages'
+      return 'recent'
+    })
+  }
+
+  const getSortLabel = () => {
+    switch (sortBy) {
+      case 'recent': return 'Recent'
+      case 'project': return 'Project'
+      case 'messages': return 'Messages'
+    }
+  }
 
   return (
     <>
       <PageHeader
         title="Conversations"
-        description="View Claude Code conversation logs"
+        description="Browse Claude Code conversation logs"
       />
       <div className="flex-1 flex overflow-hidden">
-        {/* Conversation List */}
-        <div className="w-80 border-r border-[var(--color-border)] bg-[var(--color-bg-secondary)] overflow-auto">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-32 text-[var(--color-text-muted)]">
-              Loading conversations...
+        {/* Left Sidebar - Conversation List */}
+        <div className="w-80 border-r border-[var(--color-border)] bg-[var(--color-bg-secondary)] flex flex-col">
+          {/* Search and Sort */}
+          <div className="p-3 border-b border-[var(--color-border)] space-y-2">
+            <ConversationSearch
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Search conversations..."
+            />
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-[var(--color-text-muted)]">
+                {filteredConversations.length} conversation{filteredConversations.length !== 1 ? 's' : ''}
+              </span>
+              <button
+                onClick={cycleSortOption}
+                className="flex items-center gap-1 px-2 py-1 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-hover)] rounded transition-colors"
+                title="Change sort order"
+              >
+                <ArrowUpDown size={12} />
+                <span>Sort: {getSortLabel()}</span>
+              </button>
             </div>
-          ) : !conversations || conversations.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-[var(--color-text-muted)] p-4">
-              <MessageSquare size={48} className="mb-4 opacity-50" />
-              <p className="text-center">No conversations found</p>
-              <p className="text-sm mt-1 text-center">
-                Conversations are parsed from Claude Code logs
-              </p>
-            </div>
-          ) : (
-            conversations.map((conv) => (
-              <ConversationListItem
-                key={conv.id}
-                projectName={conv.projectName}
-                lastActivity={conv.lastActivity}
-                messageCount={conv.messageCount}
-                isSelected={selectedConversationId === conv.id}
-                onClick={() => setSelectedConversationId(conv.id)}
-              />
-            ))
-          )}
+          </div>
+
+          {/* Conversation List */}
+          <div className="flex-1 overflow-hidden">
+            <ConversationList
+              conversations={filteredConversations}
+              conversationDetails={conversationDetailsCache}
+              selectedId={selectedConversationId}
+              onSelect={handleConversationSelect}
+              searchQuery={searchQuery}
+              isLoading={isLoading}
+            />
+          </div>
         </div>
 
-        {/* Conversation Detail */}
-        <div className="flex-1 bg-[var(--color-bg-primary)]">
-          <ConversationDetail conversationId={selectedConversationId} />
+        {/* Right Pane - Conversation Detail */}
+        <div className="flex-1 bg-[var(--color-bg-primary)] relative">
+          <ConversationDetailPane conversationId={selectedConversationId} />
         </div>
       </div>
     </>
