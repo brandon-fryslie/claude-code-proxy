@@ -1,7 +1,13 @@
 import { PageHeader, PageContent } from '@/components/layout'
-import { GitBranch, ArrowRight } from 'lucide-react'
+import { GitBranch, ArrowRight, Server, Settings, Check, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useSubagentStats, formatTokens, formatDuration } from '@/lib/api'
+import {
+  useSubagentStats,
+  useProviders,
+  useSubagentConfig,
+  formatTokens,
+  formatDuration,
+} from '@/lib/api'
 import { useDateRange } from '@/lib/DateRangeContext'
 
 function RouteRow({
@@ -53,7 +59,9 @@ function RouteRow({
 
 export function RoutingPage() {
   const { dateRange } = useDateRange()
-  const { data: subagentStats, isLoading } = useSubagentStats(dateRange)
+  const { data: subagentStats, isLoading: statsLoading } = useSubagentStats(dateRange)
+  const { data: providers, isLoading: providersLoading } = useProviders()
+  const { data: subagentConfig, isLoading: configLoading } = useSubagentConfig()
 
   const totalRouted = subagentStats?.subagents?.reduce((acc, s) => acc + s.requests, 0) || 0
   const totalTokens = subagentStats?.subagents?.reduce((acc, s) => acc + s.totalTokens, 0) || 0
@@ -72,103 +80,246 @@ export function RoutingPage() {
         description="Configure and monitor subagent routing"
       />
       <PageContent>
-        <div className="max-w-3xl">
-          <div className="flex items-center gap-2 mb-4">
-            <GitBranch size={16} className="text-[var(--color-text-muted)]" />
-            <h2 className="text-sm font-medium text-[var(--color-text-primary)]">Active Routes</h2>
-          </div>
+        <div className="max-w-3xl space-y-6">
+          {/* Providers Section */}
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <Server size={16} className="text-[var(--color-text-muted)]" />
+              <h2 className="text-sm font-medium text-[var(--color-text-primary)]">Providers</h2>
+            </div>
 
-          {isLoading ? (
-            <div className="flex items-center justify-center h-32 text-[var(--color-text-muted)]">
-              Loading routing data...
-            </div>
-          ) : !subagentStats || !subagentStats.subagents || subagentStats.subagents.length === 0 ? (
-            <div className="flex items-center justify-center h-32 text-[var(--color-text-muted)]">
-              <div className="text-center">
-                <p>No subagent routing configured</p>
-                <p className="text-sm mt-1">Configure subagent routing in config.yaml</p>
+            {providersLoading ? (
+              <div className="flex items-center justify-center h-32 text-[var(--color-text-muted)]">
+                Loading providers...
               </div>
-            </div>
-          ) : (
-            <>
+            ) : !providers || Object.keys(providers).length === 0 ? (
+              <div className="flex items-center justify-center h-32 text-[var(--color-text-muted)]">
+                <div className="text-center">
+                  <p>No providers configured</p>
+                  <p className="text-sm mt-1">Configure providers in config.yaml</p>
+                </div>
+              </div>
+            ) : (
               <div className="space-y-2">
-                {subagentStats.subagents.map((subagent) => (
-                  <RouteRow
-                    key={subagent.subagentName}
-                    subagent={subagent.subagentName}
-                    provider={subagent.provider}
-                    model={subagent.targetModel}
-                    requests={subagent.requests}
-                    avgResponseMs={subagent.avgResponseMs}
-                  />
+                {Object.entries(providers).map(([name, config]) => (
+                  <div
+                    key={name}
+                    className="flex items-center gap-4 p-3 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]"
+                  >
+                    <Server size={16} className="text-[var(--color-text-muted)]" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-[var(--color-text-primary)]">
+                          {name}
+                        </span>
+                        <span
+                          className={cn(
+                            'text-xs px-2 py-0.5 rounded',
+                            config.format === 'anthropic'
+                              ? 'bg-purple-500/10 text-purple-400'
+                              : 'bg-green-500/10 text-green-400'
+                          )}
+                        >
+                          {config.format}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-[var(--color-text-secondary)]">
+                        <span>{config.base_url}</span>
+                        {config.api_key && (
+                          <span className="flex items-center gap-1">
+                            <Check size={12} className="text-[var(--color-success)]" />
+                            <span className="text-[var(--color-success)]">API Key</span>
+                          </span>
+                        )}
+                        {!config.api_key && (
+                          <span className="flex items-center gap-1">
+                            <X size={12} className="text-[var(--color-text-muted)]" />
+                            <span className="text-[var(--color-text-muted)]">No API Key</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 ))}
               </div>
+            )}
+          </div>
 
-              <div className="mt-8 p-4 rounded-lg bg-[var(--color-bg-tertiary)] border border-[var(--color-border)]">
-                <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-2">
-                  Routing Statistics
-                </h3>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <p className="text-xs text-[var(--color-text-muted)]">Total Routed</p>
-                    <p className="text-lg font-semibold text-[var(--color-text-primary)]">
-                      {totalRouted.toLocaleString()}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--color-text-muted)]">Total Tokens</p>
-                    <p className="text-lg font-semibold text-[var(--color-text-primary)]">
-                      {formatTokens(totalTokens)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-[var(--color-text-muted)]">Avg Latency</p>
-                    <p className="text-lg font-semibold text-[var(--color-text-primary)]">
-                      {avgLatency ? formatDuration(avgLatency) : '--'}
-                    </p>
-                  </div>
-                </div>
+          {/* Subagent Routing Configuration */}
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <Settings size={16} className="text-[var(--color-text-muted)]" />
+              <h2 className="text-sm font-medium text-[var(--color-text-primary)]">
+                Subagent Routing
+              </h2>
+            </div>
+
+            {configLoading ? (
+              <div className="flex items-center justify-center h-32 text-[var(--color-text-muted)]">
+                Loading subagent configuration...
               </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Status Badge */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-[var(--color-text-secondary)]">Status:</span>
+                  <span
+                    className={cn(
+                      'text-xs px-2 py-1 rounded font-medium',
+                      subagentConfig?.enable
+                        ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]'
+                        : 'bg-[var(--color-text-muted)]/10 text-[var(--color-text-muted)]'
+                    )}
+                  >
+                    {subagentConfig?.enable ? 'Enabled' : 'Disabled'}
+                  </span>
+                </div>
 
-              {/* Detailed Stats Table */}
-              <div className="mt-6 p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
-                <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-4">
-                  Detailed Token Usage
-                </h3>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="border-b border-[var(--color-border)]">
-                      <tr className="text-left text-[var(--color-text-muted)]">
-                        <th className="pb-2 pr-4">Subagent</th>
-                        <th className="pb-2 pr-4">Provider:Model</th>
-                        <th className="pb-2 pr-4 text-right">Requests</th>
-                        <th className="pb-2 pr-4 text-right">Input Tokens</th>
-                        <th className="pb-2 pr-4 text-right">Output Tokens</th>
-                        <th className="pb-2 text-right">Total Tokens</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {subagentStats.subagents.map((stat, idx) => (
-                        <tr
-                          key={idx}
-                          className="border-b border-[var(--color-border)] text-[var(--color-text-secondary)]"
+                {/* Mappings */}
+                {!subagentConfig?.enable ? (
+                  <div className="p-4 rounded-lg bg-[var(--color-bg-tertiary)] border border-[var(--color-border)] text-sm text-[var(--color-text-muted)]">
+                    Subagent routing is disabled. Enable it in config.yaml to route subagents to
+                    different providers.
+                  </div>
+                ) : !subagentConfig?.mappings ||
+                  Object.keys(subagentConfig.mappings).length === 0 ? (
+                  <div className="p-4 rounded-lg bg-[var(--color-bg-tertiary)] border border-[var(--color-border)] text-sm text-[var(--color-text-muted)]">
+                    No subagent mappings configured. Add mappings in config.yaml.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {Object.entries(subagentConfig.mappings).map(([agentName, mapping]) => {
+                      const [provider, model] = mapping.split(':')
+                      return (
+                        <div
+                          key={agentName}
+                          className="flex items-center gap-4 p-3 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]"
                         >
-                          <td className="py-2 pr-4">{stat.subagentName}</td>
-                          <td className="py-2 pr-4">
-                            {stat.provider}:{stat.targetModel}
-                          </td>
-                          <td className="py-2 pr-4 text-right">{stat.requests.toLocaleString()}</td>
-                          <td className="py-2 pr-4 text-right">{formatTokens(stat.inputTokens)}</td>
-                          <td className="py-2 pr-4 text-right">{formatTokens(stat.outputTokens)}</td>
-                          <td className="py-2 text-right">{formatTokens(stat.totalTokens)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                          <div className="w-2 h-2 rounded-full bg-[var(--color-success)]" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-[var(--color-text-primary)]">
+                                {agentName}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 mt-1 text-xs text-[var(--color-text-secondary)]">
+                              <span>subagent</span>
+                              <ArrowRight size={10} className="text-[var(--color-text-muted)]" />
+                              <span>
+                                {provider}:{model}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Active Routes (Usage Statistics) */}
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <GitBranch size={16} className="text-[var(--color-text-muted)]" />
+              <h2 className="text-sm font-medium text-[var(--color-text-primary)]">
+                Active Routes
+              </h2>
+            </div>
+
+            {statsLoading ? (
+              <div className="flex items-center justify-center h-32 text-[var(--color-text-muted)]">
+                Loading routing data...
+              </div>
+            ) : !subagentStats || !subagentStats.subagents || subagentStats.subagents.length === 0 ? (
+              <div className="flex items-center justify-center h-32 text-[var(--color-text-muted)]">
+                <div className="text-center">
+                  <p>No subagent routing activity in selected period</p>
+                  <p className="text-sm mt-1">Routes will appear here once they are used</p>
                 </div>
               </div>
-            </>
-          )}
+            ) : (
+              <>
+                <div className="space-y-2">
+                  {subagentStats.subagents.map((subagent) => (
+                    <RouteRow
+                      key={subagent.subagentName}
+                      subagent={subagent.subagentName}
+                      provider={subagent.provider}
+                      model={subagent.targetModel}
+                      requests={subagent.requests}
+                      avgResponseMs={subagent.avgResponseMs}
+                    />
+                  ))}
+                </div>
+
+                <div className="mt-8 p-4 rounded-lg bg-[var(--color-bg-tertiary)] border border-[var(--color-border)]">
+                  <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-2">
+                    Routing Statistics
+                  </h3>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <p className="text-xs text-[var(--color-text-muted)]">Total Routed</p>
+                      <p className="text-lg font-semibold text-[var(--color-text-primary)]">
+                        {totalRouted.toLocaleString()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[var(--color-text-muted)]">Total Tokens</p>
+                      <p className="text-lg font-semibold text-[var(--color-text-primary)]">
+                        {formatTokens(totalTokens)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-[var(--color-text-muted)]">Avg Latency</p>
+                      <p className="text-lg font-semibold text-[var(--color-text-primary)]">
+                        {avgLatency ? formatDuration(avgLatency) : '--'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Detailed Stats Table */}
+                <div className="mt-6 p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
+                  <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-4">
+                    Detailed Token Usage
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="border-b border-[var(--color-border)]">
+                        <tr className="text-left text-[var(--color-text-muted)]">
+                          <th className="pb-2 pr-4">Subagent</th>
+                          <th className="pb-2 pr-4">Provider:Model</th>
+                          <th className="pb-2 pr-4 text-right">Requests</th>
+                          <th className="pb-2 pr-4 text-right">Input Tokens</th>
+                          <th className="pb-2 pr-4 text-right">Output Tokens</th>
+                          <th className="pb-2 text-right">Total Tokens</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {subagentStats.subagents.map((stat, idx) => (
+                          <tr
+                            key={idx}
+                            className="border-b border-[var(--color-border)] text-[var(--color-text-secondary)]"
+                          >
+                            <td className="py-2 pr-4">{stat.subagentName}</td>
+                            <td className="py-2 pr-4">
+                              {stat.provider}:{stat.targetModel}
+                            </td>
+                            <td className="py-2 pr-4 text-right">{stat.requests.toLocaleString()}</td>
+                            <td className="py-2 pr-4 text-right">{formatTokens(stat.inputTokens)}</td>
+                            <td className="py-2 pr-4 text-right">{formatTokens(stat.outputTokens)}</td>
+                            <td className="py-2 text-right">{formatTokens(stat.totalTokens)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </PageContent>
     </>

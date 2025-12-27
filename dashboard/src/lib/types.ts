@@ -275,3 +275,63 @@ export interface ConversationDetail {
   messageCount: number
   messages: ClaudeCodeMessage[]
 }
+
+// ============================================================================
+// Configuration Types
+// ============================================================================
+
+/**
+ * Provider configuration - matches proxy/internal/config/config.go ProviderConfig
+ */
+export interface ProviderConfig {
+  /** Provider format: "anthropic" or "openai" */
+  format: 'anthropic' | 'openai'
+  /** API base URL */
+  base_url: string
+  /** API key (will be "***REDACTED***" in responses from server) */
+  api_key?: string
+  /** API version (for Anthropic-format providers) */
+  version?: string
+  /** Max retry attempts */
+  max_retries?: number
+}
+
+/**
+ * Subagent routing configuration - matches proxy/internal/config/config.go SubagentsConfig
+ */
+export interface SubagentsConfig {
+  /** Whether subagent routing is enabled */
+  enable: boolean
+  /** Mapping of agent name to "provider:model" string */
+  mappings: Record<string, string>
+}
+
+/**
+ * Server configuration - matches proxy/internal/config/config.go ServerConfig
+ */
+export interface ServerConfig {
+  port: string
+  timeouts: {
+    read: string
+    write: string
+    idle: string
+  }
+}
+
+/**
+ * Storage configuration - matches proxy/internal/config/config.go StorageConfig
+ */
+export interface StorageConfig {
+  requests_dir: string
+  db_path: string
+}
+
+/**
+ * Full configuration - matches proxy/internal/config/config.go Config
+ */
+export interface Config {
+  server: ServerConfig
+  providers: Record<string, ProviderConfig>
+  storage: StorageConfig
+  subagents: SubagentsConfig
+}

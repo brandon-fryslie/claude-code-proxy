@@ -11,6 +11,9 @@ import type {
   PerformanceStatsResponse,
   Conversation,
   ConversationDetail,
+  Config,
+  ProviderConfig,
+  SubagentsConfig,
 } from './types'
 
 // Use V2 API for cleaner responses
@@ -188,6 +191,43 @@ export function useConversationDetail(id: string | null) {
     queryKey: ['conversations', 'detail', id],
     queryFn: () => fetchAPI<ConversationDetail>(`/conversations/${id}`),
     enabled: !!id,
+  })
+}
+
+// ============================================================================
+// Configuration Queries
+// ============================================================================
+
+/**
+ * Fetches the full configuration (sanitized - API keys redacted)
+ */
+export function useConfig() {
+  return useQuery({
+    queryKey: ['config'],
+    queryFn: () => fetchAPI<Config>('/config'),
+    staleTime: 60000, // Config doesn't change frequently - cache for 60 seconds
+  })
+}
+
+/**
+ * Fetches all provider configurations (sanitized - API keys redacted)
+ */
+export function useProviders() {
+  return useQuery({
+    queryKey: ['config', 'providers'],
+    queryFn: () => fetchAPI<Record<string, ProviderConfig>>('/config/providers'),
+    staleTime: 60000,
+  })
+}
+
+/**
+ * Fetches subagent routing configuration
+ */
+export function useSubagentConfig() {
+  return useQuery({
+    queryKey: ['config', 'subagents'],
+    queryFn: () => fetchAPI<SubagentsConfig>('/config/subagents'),
+    staleTime: 60000,
   })
 }
 

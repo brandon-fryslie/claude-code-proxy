@@ -1,0 +1,29 @@
+Agent: project-evaluator | 2025-12-27T12:24:21
+Scope: topic/integrate-archgw
+Status: PROPOSED (No implementation)
+Verdict: PAUSE - Ambiguities need clarification
+
+Key Findings:
+- ArchGW renamed to Plano (Rust/Envoy, not Go)
+- Current Go proxy has working routing: 984 lines, 2 providers, subagent support
+- Plano offers: 11+ providers, preference routing, guardrails, observability
+- API mismatch: Plano requires OpenAI format, proxy receives Anthropic
+
+Integration Options:
+A. Full Replacement - HIGH risk, lose monitoring/dashboard
+B. Upstream Integration - MEDIUM risk, added latency
+C. Feature Porting - VARIABLE risk, cherry-pick features
+
+Ambiguities (must resolve):
+1. Primary goal? (Providers / Routing / Guardrails / Observability)
+2. Docker acceptable? Current deploy is single Go binary
+3. Anthropic format passthrough important?
+4. Integration scope? (Replace vs integrate vs port)
+
+Recommendations:
+- Proceed with vibeproxy features first (lower risk)
+- Define success criteria before ArchGW work
+- Wait on web-routing-configuration until ArchGW decision
+
+Cache: No new eval-cache entries (research phase)
+-> PAUSE: Clarify integration goals before proceeding
