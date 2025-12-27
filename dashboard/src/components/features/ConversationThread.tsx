@@ -18,8 +18,10 @@ export const ConversationThread: FC<ConversationThreadProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearch, setShowSearch] = useState(false)
+  const [showJumpButtons, setShowJumpButtons] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesStartRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   // Filter to only user/assistant messages with valid content
   const chatMessages = useMemo(() => {
@@ -41,6 +43,23 @@ export const ConversationThread: FC<ConversationThreadProps> = ({
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Show/hide jump buttons based on scroll position
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container
+      // Show buttons if scrolled more than 200px from top or bottom
+      const isScrolledFromTop = scrollTop > 200
+      const isScrolledFromBottom = scrollHeight - scrollTop - clientHeight > 200
+      setShowJumpButtons(isScrolledFromTop || isScrolledFromBottom)
+    }
+
+    container.addEventListener('scroll', handleScroll)
+    return () => container.removeEventListener('scroll', handleScroll)
+  }, [])
 
   const scrollToTop = () => {
     messagesStartRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -89,7 +108,7 @@ export const ConversationThread: FC<ConversationThreadProps> = ({
       </div>
 
       {/* Message list */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-3 space-y-3">
         <div ref={messagesStartRef} />
         {chatMessages.map((msg, idx) => (
           <MessageBubble
@@ -101,23 +120,25 @@ export const ConversationThread: FC<ConversationThreadProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Jump to top/bottom buttons */}
-      <div className="absolute bottom-4 right-4 flex flex-col gap-2">
-        <button
-          onClick={scrollToTop}
-          className="p-2 rounded-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] shadow-lg hover:bg-[var(--color-bg-hover)] transition-colors"
-          aria-label="Scroll to top"
-        >
-          <ArrowUp size={16} className="text-[var(--color-text-primary)]" />
-        </button>
-        <button
-          onClick={scrollToBottom}
-          className="p-2 rounded-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] shadow-lg hover:bg-[var(--color-bg-hover)] transition-colors"
-          aria-label="Scroll to bottom"
-        >
-          <ArrowDown size={16} className="text-[var(--color-text-primary)]" />
-        </button>
-      </div>
+      {/* Jump to top/bottom buttons - only show when scrolled */}
+      {showJumpButtons && (
+        <div className="absolute bottom-4 right-4 flex flex-col gap-2">
+          <button
+            onClick={scrollToTop}
+            className="p-2 rounded-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] shadow-lg hover:bg-[var(--color-bg-hover)] transition-colors"
+            aria-label="Scroll to top"
+          >
+            <ArrowUp size={16} className="text-[var(--color-text-primary)]" />
+          </button>
+          <button
+            onClick={scrollToBottom}
+            className="p-2 rounded-full bg-[var(--color-bg-secondary)] border border-[var(--color-border)] shadow-lg hover:bg-[var(--color-bg-hover)] transition-colors"
+            aria-label="Scroll to bottom"
+          >
+            <ArrowDown size={16} className="text-[var(--color-text-primary)]" />
+          </button>
+        </div>
+      )}
     </div>
   )
 }
