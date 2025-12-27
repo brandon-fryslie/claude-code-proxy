@@ -2,7 +2,7 @@
 
 **Goal:** Achieve feature parity between old dashboard (web/) and new dashboard (dashboard/)
 
-**Last Updated:** 2025-12-26
+**Last Updated:** 2025-12-27
 
 ---
 
@@ -150,9 +150,53 @@
   - Add clear all requests button
   - Settings for auto-refresh
 
+- **web-routing-configuration** [PROPOSED]
+  - Configure subagent-to-provider routing from web UI
+  - View/edit config.yaml subagent mappings
+  - Add/remove/modify routing rules
+  - Persist changes to config file
+  - Reload proxy configuration
+
+- **multi-provider-comparison** [PROPOSED]
+  - Send same prompt to multiple providers simultaneously
+  - Side-by-side response comparison view
+  - Compare response quality, latency, token usage
+  - Select providers/models to include in comparison
+  - Save comparison results for later review
+
+- **vibeproxy-feature-analysis** [PROPOSED]
+  - Research: Analyze VibeProxy features for potential adoption
+  - Compare provider support (Gemini, Qwen, Antigravity, GitHub Copilot)
+  - Evaluate OAuth authentication approach
+  - Assess multi-account round-robin/failover
+  - Document feature gap analysis
+
+- **oauth-authentication** [PROPOSED]
+  - OAuth login to use existing AI subscriptions (ChatGPT Plus, Claude Pro, etc.)
+  - Browser-based OAuth flow with callback handler
+  - Token storage and refresh management
+  - Dashboard OAuth account management UI
+  - Support for: OpenAI, Anthropic, Google (Gemini)
+
 ---
 
-## Phase 6: Testing & Polish [QUEUED]
+## Phase 6: ArchGW Integration [QUEUED]
+
+**Goal:** Integrate ArchGW for unified provider routing
+
+### Topics
+
+- **integrate-archgw** [PROPOSED]
+  - Epic: `brandon-fryslie_claude-code-proxy-evg`
+  - Research ArchGW capabilities and architecture
+  - Evaluate integration approach with existing proxy
+  - Implement ArchGW as routing backend
+  - Migrate current provider routing to ArchGW
+  - Add ArchGW configuration to web dashboard
+
+---
+
+## Phase 7: Testing & Polish [QUEUED]
 
 **Goal:** Ensure reliability and production readiness
 

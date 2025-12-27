@@ -1,7 +1,8 @@
 import { PageHeader, PageContent } from '@/components/layout'
 import { GitBranch, ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useSubagentStats, getTodayDateRange, formatTokens, formatDuration } from '@/lib/api'
+import { useSubagentStats, formatTokens, formatDuration } from '@/lib/api'
+import { useDateRange } from '@/lib/DateRangeContext'
 
 function RouteRow({
   subagent,
@@ -51,7 +52,7 @@ function RouteRow({
 }
 
 export function RoutingPage() {
-  const dateRange = getTodayDateRange()
+  const { dateRange } = useDateRange()
   const { data: subagentStats, isLoading } = useSubagentStats(dateRange)
 
   const totalRouted = subagentStats?.subagents?.reduce((acc, s) => acc + s.requests, 0) || 0
@@ -105,7 +106,7 @@ export function RoutingPage() {
 
               <div className="mt-8 p-4 rounded-lg bg-[var(--color-bg-tertiary)] border border-[var(--color-border)]">
                 <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-2">
-                  Routing Statistics (Today)
+                  Routing Statistics
                 </h3>
                 <div className="grid grid-cols-3 gap-4">
                   <div>

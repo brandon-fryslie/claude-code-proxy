@@ -1,6 +1,7 @@
 import { createRouter, createRootRoute, createRoute, Outlet, useNavigate } from '@tanstack/react-router'
 import { useState, useEffect } from 'react'
-import { Sidebar } from '@/components/layout/Sidebar'
+import { Sidebar, GlobalDatePicker } from '@/components/layout'
+import { DateRangeProvider } from '@/lib/DateRangeContext'
 import { DashboardPage } from '@/pages/Dashboard'
 import { RequestsPage } from '@/pages/Requests'
 import { ConversationsPage } from '@/pages/Conversations'
@@ -31,12 +32,18 @@ function RootLayout() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[var(--color-bg-primary)]">
-      <Sidebar activeItem={activeItem} onItemSelect={handleItemSelect} />
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <Outlet />
-      </main>
-    </div>
+    <DateRangeProvider>
+      <div className="flex h-screen overflow-hidden bg-[var(--color-bg-primary)]">
+        <Sidebar activeItem={activeItem} onItemSelect={handleItemSelect} />
+        <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          {/* Global date picker header */}
+          <div className="flex items-center justify-end h-10 px-4 border-b border-[var(--color-border)] bg-[var(--color-bg-tertiary)]">
+            <GlobalDatePicker />
+          </div>
+          <Outlet />
+        </main>
+      </div>
+    </DateRangeProvider>
   )
 }
 

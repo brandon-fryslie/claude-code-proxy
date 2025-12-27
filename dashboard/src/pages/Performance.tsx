@@ -1,10 +1,11 @@
 import { PageHeader, PageContent } from '@/components/layout'
 import { Zap } from 'lucide-react'
-import { usePerformanceStats, getTodayDateRange, formatDuration } from '@/lib/api'
+import { usePerformanceStats, formatDuration } from '@/lib/api'
+import { useDateRange } from '@/lib/DateRangeContext'
 import { PerformanceChart } from '@/components/charts'
 
 export function PerformancePage() {
-  const dateRange = getTodayDateRange()
+  const { dateRange } = useDateRange()
   const { data: perfStats, isLoading } = usePerformanceStats(dateRange)
 
   // Calculate overall stats
@@ -49,7 +50,7 @@ export function PerformancePage() {
             <p className="text-2xl font-semibold text-[var(--color-text-primary)] mt-1">
               {isLoading ? '--' : avgResponse ? formatDuration(avgResponse) : '--'}
             </p>
-            <p className="text-xs text-[var(--color-text-secondary)] mt-1">Today's average</p>
+            <p className="text-xs text-[var(--color-text-secondary)] mt-1">Selected range</p>
           </div>
           <div className="p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
             <p className="text-xs text-[var(--color-text-muted)] uppercase tracking-wide">P50</p>

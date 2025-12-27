@@ -8,6 +8,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	"github.com/seifghazi/claude-code-monitor/internal/config"
 	"github.com/seifghazi/claude-code-monitor/internal/model"
 )
 
@@ -317,4 +318,111 @@ func (h *Handler) GetWeeklyStatsV2(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSONResponse(w, stats)
+}
+
+// ============================================================================
+// Configuration API V2
+// ============================================================================
+
+// GetConfigV2 returns the full configuration (sanitized)
+func (h *Handler) GetConfigV2(w http.ResponseWriter, r *http.Request) {
+	if h.config == nil {
+		writeErrorResponse(w, "Configuration not available", http.StatusInternalServerError)
+		return
+	}
+
+	// Sanitize the config before returning
+	sanitized := sanitizeConfig(h.config)
+	writeJSONResponse(w, sanitized)
+}
+
+// GetProvidersV2 returns all provider configurations (sanitized)
+func (h *Handler) GetProvidersV2(w http.ResponseWriter, r *http.Request) {
+	if h.config == nil {
+		writeErrorResponse(w, "Configuration not available", http.StatusInternalServerError)
+		return
+	}
+
+	// Create sanitized provider map
+	providers := make(map[string]*config.ProviderConfig)
+	for name, provider := range h.config.Providers {
+		providers[name] = &config.ProviderConfig{
+			Format:     provider.Format,
+			BaseURL:    provider.BaseURL,
+			Version:    provider.Version,
+			MaxRetries: provider.MaxRetries,
+			APIKey:     redactAPIKey(provider.APIKey),
+		}
+	}
+
+	// Return empty object if no providers (not null)
+	if providers == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte("{}"))
+		return
+	}
+
+	writeJSONResponse(w, providers)
+}
+
+// GetSubagentConfigV2 returns subagent routing configuration
+func (h *Handler) GetSubagentConfigV2(w http.ResponseWriter, r *http.Request) {
+	if h.config == nil {
+		writeErrorResponse(w, "Configuration not available", http.StatusInternalServerError)
+		return
+	}
+
+	// Create response with subagent config
+	subagentConfig := map[string]interface{}{
+		"enable":   h.config.Subagents.Enable,
+		"mappings": h.config.Subagents.Mappings,
+	}
+
+	// Ensure mappings is never null
+	if subagentConfig["mappings"] == nil {
+		subagentConfig["mappings"] = make(map[string]string)
+	}
+
+	writeJSONResponse(w, subagentConfig)
+}
+
+// sanitizeConfig creates a deep copy of the config with API keys redacted
+func sanitizeConfig(cfg *config.Config) *config.Config {
+	// Create a copy of the config
+	sanitized := &config.Config{
+		Server:  cfg.Server,
+		Storage: cfg.Storage,
+		Subagents: config.SubagentsConfig{
+			Enable:   cfg.Subagents.Enable,
+			Mappings: make(map[string]string),
+		},
+		Providers: make(map[string]*config.ProviderConfig),
+	}
+
+	// Copy subagent mappings (no sensitive data)
+	for k, v := range cfg.Subagents.Mappings {
+		sanitized.Subagents.Mappings[k] = v
+	}
+
+	// Copy and sanitize providers
+	for name, provider := range cfg.Providers {
+		sanitized.Providers[name] = &config.ProviderConfig{
+			Format:     provider.Format,
+			BaseURL:    provider.BaseURL,
+			Version:    provider.Version,
+			MaxRetries: provider.MaxRetries,
+			// Redact API key if present
+			APIKey: redactAPIKey(provider.APIKey),
+		}
+	}
+
+	return sanitized
+}
+
+// redactAPIKey returns a redacted string if the API key is non-empty
+func redactAPIKey(apiKey string) string {
+	if apiKey != "" {
+		return "***REDACTED***"
+	}
+	return ""
 }

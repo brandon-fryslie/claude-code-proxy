@@ -1,6 +1,7 @@
 import { PageHeader, PageContent } from '@/components/layout'
 import { Activity, BarChart3, Clock, Zap } from 'lucide-react'
-import { useHourlyStats, useProviderStats, getTodayDateRange, formatDuration, formatTokens } from '@/lib/api'
+import { useHourlyStats, useProviderStats, formatDuration, formatTokens } from '@/lib/api'
+import { useDateRange } from '@/lib/DateRangeContext'
 import { HourlyUsageChart } from '@/components/charts'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 
@@ -38,9 +39,15 @@ function StatCard({ label, value, subValue, icon, isLoading }: StatCardProps) {
 const CHART_COLORS = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899']
 
 export function DashboardPage() {
-  const dateRange = getTodayDateRange()
+  const { dateRange, presetRange, selectedDate } = useDateRange()
   const { data: hourlyStats, isLoading: isLoadingHourly } = useHourlyStats(dateRange)
   const { data: providerStats, isLoading: isLoadingProviders } = useProviderStats(dateRange)
+
+  // Format range label
+  const rangeLabel = presetRange === 'today' ? 'Today' :
+                     presetRange === 'week' ? 'Last 7 Days' :
+                     presetRange === 'month' ? 'Last 30 Days' :
+                     selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 
   const providerChartData = providerStats?.providers?.map(p => ({
     name: p.provider,
@@ -64,7 +71,7 @@ export function DashboardPage() {
         {/* Stats Grid */}
         <div className="grid grid-cols-4 gap-4 mb-6">
           <StatCard
-            label="Requests Today"
+            label="Requests"
             value={todayRequests.toLocaleString()}
             subValue={`${formatTokens(todayTokens)} tokens`}
             icon={<Activity size={20} />}
@@ -73,14 +80,14 @@ export function DashboardPage() {
           <StatCard
             label="Tokens Used"
             value={formatTokens(todayTokens)}
-            subValue="Today's total"
+            subValue={rangeLabel}
             icon={<BarChart3 size={20} />}
             isLoading={isLoadingHourly}
           />
           <StatCard
             label="Avg Response Time"
             value={avgResponseTime ? formatDuration(avgResponseTime) : '--'}
-            subValue="Today's average"
+            subValue={rangeLabel}
             icon={<Clock size={20} />}
             isLoading={isLoadingHourly}
           />
@@ -98,7 +105,7 @@ export function DashboardPage() {
           {/* Hourly Usage Chart with Model Breakdown */}
           <div className="p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
             <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-4">
-              Hourly Usage (Today)
+              Hourly Usage
             </h3>
             {isLoadingHourly ? (
               <div className="flex items-center justify-center h-64 text-[var(--color-text-muted)]">

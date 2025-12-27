@@ -1,0 +1,5 @@
+Agent: status-planner | 2025-12-27-034143
+Topic: web-routing-configuration
+Files: PLAN-2025-12-27-034143.md, DOD-2025-12-27-034143.md
+Items: 8 total (P0: 3, P1: 3, P2: 2)
+Sprint 1 Focus: P0 items (Read-Only Config API & Display)

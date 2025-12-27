@@ -18,6 +18,7 @@ import (
 
 	"github.com/gorilla/mux"
 
+	"github.com/seifghazi/claude-code-monitor/internal/config"
 	"github.com/seifghazi/claude-code-monitor/internal/model"
 	"github.com/seifghazi/claude-code-monitor/internal/service"
 )
@@ -27,9 +28,10 @@ type Handler struct {
 	conversationService service.ConversationService
 	modelRouter         *service.ModelRouter
 	logger              *log.Logger
+	config              *config.Config
 }
 
-func New(storageService service.StorageService, logger *log.Logger, modelRouter *service.ModelRouter) *Handler {
+func New(storageService service.StorageService, logger *log.Logger, modelRouter *service.ModelRouter, cfg *config.Config) *Handler {
 	conversationService := service.NewConversationService()
 
 	return &Handler{
@@ -37,6 +39,7 @@ func New(storageService service.StorageService, logger *log.Logger, modelRouter 
 		conversationService: conversationService,
 		modelRouter:         modelRouter,
 		logger:              logger,
+		config:              cfg,
 	}
 }
 

@@ -1,0 +1,7 @@
+Agent: project-evaluator | 2025-12-27
+Scope: topic/web-routing-configuration
+Completion: 5% | Gaps: 5 major | Test Quality: N/A (no tests for this feature)
+Reused: 0 findings | Fresh: All findings fresh
+Cache updated: N/A (no stable knowledge to cache for this topic)
+Ambiguities: 5 found | Workflow: CONTINUE
+-> Start with backend /api/config GET endpoint, then add provider display to Routing.tsx

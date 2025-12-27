@@ -56,7 +56,7 @@ func main() {
 	}
 	logger.Println("🗿 SQLite database ready")
 
-	h := handler.New(storageService, logger, modelRouter)
+	h := handler.New(storageService, logger, modelRouter, cfg)
 
 	r := mux.NewRouter()
 
@@ -102,6 +102,11 @@ func main() {
 	r.HandleFunc("/api/v2/stats/providers", h.GetProviderStatsV2).Methods("GET")
 	r.HandleFunc("/api/v2/stats/subagents", h.GetSubagentStatsV2).Methods("GET")
 	r.HandleFunc("/api/v2/stats/performance", h.GetPerformanceStatsV2).Methods("GET")
+
+	// V2 Configuration API
+	r.HandleFunc("/api/v2/config", h.GetConfigV2).Methods("GET")
+	r.HandleFunc("/api/v2/config/providers", h.GetProvidersV2).Methods("GET")
+	r.HandleFunc("/api/v2/config/subagents", h.GetSubagentConfigV2).Methods("GET")
 
 	r.NotFoundHandler = http.HandlerFunc(h.NotFound)
 

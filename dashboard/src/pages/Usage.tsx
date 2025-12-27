@@ -1,19 +1,19 @@
-import { useState } from 'react'
 import { PageHeader, PageContent } from '@/components/layout'
 import { BarChart3 } from 'lucide-react'
-import { useModelStats, useWeeklyStats, getTodayDateRange, formatTokens } from '@/lib/api'
-import { WeeklyUsageChart, ModelBreakdownChart, ModelComparisonBar, DateNavigation } from '@/components/charts'
+import { useModelStats, useWeeklyStats, formatTokens } from '@/lib/api'
+import { useDateRange } from '@/lib/DateRangeContext'
+import { WeeklyUsageChart, ModelBreakdownChart, ModelComparisonBar } from '@/components/charts'
 import { toISODateString } from '@/lib/chartUtils'
 
 export function UsagePage() {
-  const [selectedDate, setSelectedDate] = useState(new Date())
-  const dateRange = getTodayDateRange()
+  const { dateRange, selectedDate, setSelectedDate, presetRange } = useDateRange()
 
   const { data: modelStats, isLoading: isLoadingModels } = useModelStats(dateRange)
   const { data: weeklyStats, isLoading: isLoadingWeekly } = useWeeklyStats()
 
-  // Calculate today's tokens
-  const todayTokens = modelStats?.modelStats?.reduce((acc, m) => acc + m.tokens, 0) || 0
+  // Calculate tokens for selected range
+  const rangeTokens = modelStats?.modelStats?.reduce((acc, m) => acc + m.tokens, 0) || 0
+  const rangeRequests = modelStats?.modelStats?.reduce((acc, m) => acc + m.requests, 0) || 0
 
   // Calculate week tokens (last 7 days)
   const weekTokens =
@@ -23,6 +23,12 @@ export function UsagePage() {
   const monthTokens =
     weeklyStats?.dailyStats?.slice(-30).reduce((acc, day) => acc + day.tokens, 0) || 0
 
+  // Format range label based on preset
+  const rangeLabel = presetRange === 'today' ? 'Today' :
+                     presetRange === 'week' ? 'Last 7 Days' :
+                     presetRange === 'month' ? 'Last 30 Days' :
+                     selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+
   return (
     <>
       <PageHeader
@@ -31,23 +37,30 @@ export function UsagePage() {
       />
       <PageContent>
         {/* Stats Grid */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-4 gap-4 mb-6">
           <div className="p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
-            <p className="text-xs text-[var(--color-text-muted)] uppercase tracking-wide">Today</p>
+            <p className="text-xs text-[var(--color-text-muted)] uppercase tracking-wide">{rangeLabel}</p>
             <p className="text-2xl font-semibold text-[var(--color-text-primary)] mt-1">
-              {isLoadingModels ? '--' : formatTokens(todayTokens)}
+              {isLoadingModels ? '--' : formatTokens(rangeTokens)}
             </p>
             <p className="text-xs text-[var(--color-text-secondary)] mt-1">tokens</p>
           </div>
           <div className="p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
-            <p className="text-xs text-[var(--color-text-muted)] uppercase tracking-wide">This Week</p>
+            <p className="text-xs text-[var(--color-text-muted)] uppercase tracking-wide">Requests</p>
+            <p className="text-2xl font-semibold text-[var(--color-text-primary)] mt-1">
+              {isLoadingModels ? '--' : rangeRequests.toLocaleString()}
+            </p>
+            <p className="text-xs text-[var(--color-text-secondary)] mt-1">{rangeLabel.toLowerCase()}</p>
+          </div>
+          <div className="p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
+            <p className="text-xs text-[var(--color-text-muted)] uppercase tracking-wide">Last 7 Days</p>
             <p className="text-2xl font-semibold text-[var(--color-text-primary)] mt-1">
               {isLoadingWeekly ? '--' : formatTokens(weekTokens)}
             </p>
             <p className="text-xs text-[var(--color-text-secondary)] mt-1">tokens</p>
           </div>
           <div className="p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
-            <p className="text-xs text-[var(--color-text-muted)] uppercase tracking-wide">This Month</p>
+            <p className="text-xs text-[var(--color-text-muted)] uppercase tracking-wide">Last 30 Days</p>
             <p className="text-2xl font-semibold text-[var(--color-text-primary)] mt-1">
               {isLoadingWeekly ? '--' : formatTokens(monthTokens)}
             </p>
@@ -55,18 +68,11 @@ export function UsagePage() {
           </div>
         </div>
 
-        {/* Weekly Usage Chart with Date Navigation */}
+        {/* Weekly Usage Chart */}
         <div className="mb-6 p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-medium text-[var(--color-text-primary)]">
-              Weekly Usage Trend
-            </h3>
-            <DateNavigation
-              selectedDate={selectedDate}
-              onDateChange={setSelectedDate}
-              mode="day"
-            />
-          </div>
+          <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-4">
+            Weekly Usage Trend
+          </h3>
           {isLoadingWeekly ? (
             <div className="flex flex-col items-center justify-center h-80 text-[var(--color-text-muted)]">
               <BarChart3 size={48} className="mb-4 opacity-50" />
@@ -93,7 +99,7 @@ export function UsagePage() {
           {/* Pie Chart */}
           <div className="p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
             <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-4">
-              Token Distribution by Model (Today)
+              Token Distribution by Model
             </h3>
             {isLoadingModels ? (
               <div className="flex flex-col items-center justify-center h-80 text-[var(--color-text-muted)]">
@@ -117,7 +123,7 @@ export function UsagePage() {
           {/* Bar Chart */}
           <div className="p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
             <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-4">
-              Model Comparison (Today)
+              Model Comparison
             </h3>
             {isLoadingModels ? (
               <div className="flex flex-col items-center justify-center h-80 text-[var(--color-text-muted)]">
@@ -142,7 +148,7 @@ export function UsagePage() {
         {modelStats && modelStats.modelStats && modelStats.modelStats.length > 0 && (
           <div className="p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
             <h3 className="text-sm font-medium text-[var(--color-text-primary)] mb-4">
-              Detailed Breakdown (Today)
+              Detailed Breakdown
             </h3>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
