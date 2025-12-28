@@ -14,7 +14,7 @@ import (
 	"github.com/seifghazi/claude-code-monitor/internal/model"
 )
 
-type sqliteStorageService struct {
+type SQLiteStorageService struct {
 	db     *sql.DB
 	config *config.StorageConfig
 }
@@ -28,7 +28,7 @@ func NewSQLiteStorageService(cfg *config.StorageConfig) (StorageService, error) 
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	service := &sqliteStorageService{
+	service := &SQLiteStorageService{
 		db:     db,
 		config: cfg,
 	}
@@ -40,7 +40,7 @@ func NewSQLiteStorageService(cfg *config.StorageConfig) (StorageService, error) 
 	return service, nil
 }
 
-func (s *sqliteStorageService) createTables() error {
+func (s *SQLiteStorageService) createTables() error {
 	// Check if table exists
 	var tableExists int
 	err := s.db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='requests'").Scan(&tableExists)
@@ -99,7 +99,7 @@ func (s *sqliteStorageService) createTables() error {
 	return nil
 }
 
-func (s *sqliteStorageService) runMigrations() error {
+func (s *SQLiteStorageService) runMigrations() error {
 	// Add new columns if they don't exist (for existing databases)
 	migrations := []string{
 		"ALTER TABLE requests ADD COLUMN provider TEXT",
@@ -124,10 +124,82 @@ func (s *sqliteStorageService) runMigrations() error {
 	s.db.Exec("CREATE INDEX IF NOT EXISTS idx_subagent ON requests(subagent_name)")
 	s.db.Exec("CREATE INDEX IF NOT EXISTS idx_timestamp_provider ON requests(timestamp DESC, provider)")
 
+	// Run conversation search migrations
+	if err := s.runConversationSearchMigrations(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
-func (s *sqliteStorageService) SaveRequest(request *model.RequestLog) (string, error) {
+// runConversationSearchMigrations creates the conversation search tables and FTS5 index
+func (s *SQLiteStorageService) runConversationSearchMigrations() error {
+	// Check if conversations table already exists
+	var conversationsExists int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='conversations'").Scan(&conversationsExists)
+	if err != nil {
+		return fmt.Errorf("failed to check if conversations table exists: %w", err)
+	}
+
+	if conversationsExists == 0 {
+		// Create conversations metadata table
+		conversationsSchema := `
+		CREATE TABLE conversations (
+			id TEXT PRIMARY KEY,
+			project_path TEXT NOT NULL,
+			project_name TEXT NOT NULL,
+			start_time DATETIME,
+			end_time DATETIME,
+			message_count INTEGER DEFAULT 0,
+			file_path TEXT NOT NULL UNIQUE,
+			file_mtime DATETIME,
+			indexed_at DATETIME
+		);
+
+		CREATE INDEX idx_conversations_project ON conversations(project_path);
+		CREATE INDEX idx_conversations_mtime ON conversations(file_mtime DESC);
+		CREATE INDEX idx_conversations_indexed ON conversations(indexed_at DESC);
+		`
+
+		if _, err := s.db.Exec(conversationsSchema); err != nil {
+			return fmt.Errorf("failed to create conversations table: %w", err)
+		}
+
+		log.Println("✅ Created conversations table")
+	}
+
+	// Check if FTS5 table exists
+	var ftsExists int
+	err = s.db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='conversations_fts'").Scan(&ftsExists)
+	if err != nil {
+		return fmt.Errorf("failed to check if FTS table exists: %w", err)
+	}
+
+	if ftsExists == 0 {
+		// Create FTS5 virtual table
+		ftsSchema := `
+		CREATE VIRTUAL TABLE conversations_fts USING fts5(
+			conversation_id UNINDEXED,
+			message_uuid UNINDEXED,
+			message_type,
+			content_text,
+			tool_names,
+			timestamp UNINDEXED,
+			tokenize='porter unicode61'
+		);
+		`
+
+		if _, err := s.db.Exec(ftsSchema); err != nil {
+			return fmt.Errorf("failed to create FTS table: %w", err)
+		}
+
+		log.Println("✅ Created conversations_fts FTS5 table")
+	}
+
+	return nil
+}
+
+func (s *SQLiteStorageService) SaveRequest(request *model.RequestLog) (string, error) {
 	headersJSON, err := json.Marshal(request.Headers)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal headers: %w", err)
@@ -173,7 +245,7 @@ func (s *sqliteStorageService) SaveRequest(request *model.RequestLog) (string, e
 	return request.RequestID, nil
 }
 
-func (s *sqliteStorageService) GetRequests(page, limit int) ([]model.RequestLog, int, error) {
+func (s *SQLiteStorageService) GetRequests(page, limit int) ([]model.RequestLog, int, error) {
 	// Get total count
 	var total int
 	err := s.db.QueryRow("SELECT COUNT(*) FROM requests").Scan(&total)
@@ -255,7 +327,7 @@ func (s *sqliteStorageService) GetRequests(page, limit int) ([]model.RequestLog,
 	return requests, total, nil
 }
 
-func (s *sqliteStorageService) ClearRequests() (int, error) {
+func (s *SQLiteStorageService) ClearRequests() (int, error) {
 	result, err := s.db.Exec("DELETE FROM requests")
 	if err != nil {
 		return 0, fmt.Errorf("failed to clear requests: %w", err)
@@ -269,7 +341,7 @@ func (s *sqliteStorageService) ClearRequests() (int, error) {
 	return int(rowsAffected), nil
 }
 
-func (s *sqliteStorageService) UpdateRequestWithGrading(requestID string, grade *model.PromptGrade) error {
+func (s *SQLiteStorageService) UpdateRequestWithGrading(requestID string, grade *model.PromptGrade) error {
 	gradeJSON, err := json.Marshal(grade)
 	if err != nil {
 		return fmt.Errorf("failed to marshal grade: %w", err)
@@ -284,7 +356,7 @@ func (s *sqliteStorageService) UpdateRequestWithGrading(requestID string, grade 
 	return nil
 }
 
-func (s *sqliteStorageService) UpdateRequestWithResponse(request *model.RequestLog) error {
+func (s *SQLiteStorageService) UpdateRequestWithResponse(request *model.RequestLog) error {
 	responseJSON, err := json.Marshal(request.Response)
 	if err != nil {
 		return fmt.Errorf("failed to marshal response: %w", err)
@@ -343,12 +415,12 @@ func (s *sqliteStorageService) UpdateRequestWithResponse(request *model.RequestL
 	return nil
 }
 
-func (s *sqliteStorageService) EnsureDirectoryExists() error {
+func (s *SQLiteStorageService) EnsureDirectoryExists() error {
 	// No directory needed for SQLite
 	return nil
 }
 
-func (s *sqliteStorageService) GetRequestByShortID(shortID string) (*model.RequestLog, string, error) {
+func (s *SQLiteStorageService) GetRequestByShortID(shortID string) (*model.RequestLog, string, error) {
 	query := `
 		SELECT id, timestamp, method, endpoint, headers, body, model, user_agent, content_type, prompt_grade, response, original_model, routed_model
 		FROM requests
@@ -412,11 +484,11 @@ func (s *sqliteStorageService) GetRequestByShortID(shortID string) (*model.Reque
 	return &req, req.RequestID, nil
 }
 
-func (s *sqliteStorageService) GetConfig() *config.StorageConfig {
+func (s *SQLiteStorageService) GetConfig() *config.StorageConfig {
 	return s.config
 }
 
-func (s *sqliteStorageService) GetAllRequests(modelFilter string) ([]*model.RequestLog, error) {
+func (s *SQLiteStorageService) GetAllRequests(modelFilter string) ([]*model.RequestLog, error) {
 	query := `
 		SELECT id, timestamp, method, endpoint, headers, body, model, user_agent, content_type, prompt_grade, response, original_model, routed_model
 		FROM requests
@@ -493,7 +565,7 @@ func (s *sqliteStorageService) GetAllRequests(modelFilter string) ([]*model.Requ
 }
 
 // GetRequestsSummary returns minimal data for list view - no body/headers, only usage from response
-func (s *sqliteStorageService) GetRequestsSummary(modelFilter string) ([]*model.RequestSummary, error) {
+func (s *SQLiteStorageService) GetRequestsSummary(modelFilter string) ([]*model.RequestSummary, error) {
 	query := `
 		SELECT id, timestamp, method, endpoint, model, original_model, routed_model, response
 		FROM requests
@@ -558,7 +630,7 @@ func (s *sqliteStorageService) GetRequestsSummary(modelFilter string) ([]*model.
 }
 
 // GetRequestsSummaryPaginated returns minimal data for list view with pagination - super fast!
-func (s *sqliteStorageService) GetRequestsSummaryPaginated(modelFilter, startTime, endTime string, offset, limit int) ([]*model.RequestSummary, int, error) {
+func (s *SQLiteStorageService) GetRequestsSummaryPaginated(modelFilter, startTime, endTime string, offset, limit int) ([]*model.RequestSummary, int, error) {
 	// First get total count
 	countQuery := "SELECT COUNT(*) FROM requests"
 	countArgs := []interface{}{}
@@ -668,7 +740,7 @@ func (s *sqliteStorageService) GetRequestsSummaryPaginated(modelFilter, startTim
 }
 
 // GetStats returns aggregated statistics for the dashboard - lightning fast!
-func (s *sqliteStorageService) GetStats(startDate, endDate string) (*model.DashboardStats, error) {
+func (s *SQLiteStorageService) GetStats(startDate, endDate string) (*model.DashboardStats, error) {
 	stats := &model.DashboardStats{
 		DailyStats: make([]model.DailyTokens, 0),
 	}
@@ -768,7 +840,7 @@ func (s *sqliteStorageService) GetStats(startDate, endDate string) (*model.Dashb
 }
 
 // GetHourlyStats returns hourly breakdown for a specific time range
-func (s *sqliteStorageService) GetHourlyStats(startTime, endTime string) (*model.HourlyStatsResponse, error) {
+func (s *SQLiteStorageService) GetHourlyStats(startTime, endTime string) (*model.HourlyStatsResponse, error) {
 	query := `
 		SELECT timestamp, COALESCE(model, 'unknown') as model, response
 		FROM requests
@@ -890,7 +962,7 @@ func (s *sqliteStorageService) GetHourlyStats(startTime, endTime string) (*model
 }
 
 // GetModelStats returns model breakdown for a specific time range
-func (s *sqliteStorageService) GetModelStats(startTime, endTime string) (*model.ModelStatsResponse, error) {
+func (s *SQLiteStorageService) GetModelStats(startTime, endTime string) (*model.ModelStatsResponse, error) {
 	query := `
 		SELECT timestamp, COALESCE(model, 'unknown') as model, response
 		FROM requests
@@ -963,7 +1035,7 @@ func (s *sqliteStorageService) GetModelStats(startTime, endTime string) (*model.
 }
 
 // GetLatestRequestDate returns the timestamp of the most recent request
-func (s *sqliteStorageService) GetLatestRequestDate() (*time.Time, error) {
+func (s *SQLiteStorageService) GetLatestRequestDate() (*time.Time, error) {
 	var timestamp string
 	err := s.db.QueryRow("SELECT timestamp FROM requests ORDER BY timestamp DESC LIMIT 1").Scan(&timestamp)
 	if err == sql.ErrNoRows {
@@ -981,12 +1053,12 @@ func (s *sqliteStorageService) GetLatestRequestDate() (*time.Time, error) {
 	return &t, nil
 }
 
-func (s *sqliteStorageService) Close() error {
+func (s *SQLiteStorageService) Close() error {
 	return s.db.Close()
 }
 
 // GetProviderStats returns analytics broken down by provider
-func (s *sqliteStorageService) GetProviderStats(startTime, endTime string) (*model.ProviderStatsResponse, error) {
+func (s *SQLiteStorageService) GetProviderStats(startTime, endTime string) (*model.ProviderStatsResponse, error) {
 	query := `
 		SELECT
 			COALESCE(provider, 'unknown') as provider,
@@ -1039,7 +1111,7 @@ func (s *sqliteStorageService) GetProviderStats(startTime, endTime string) (*mod
 }
 
 // GetSubagentStats returns analytics broken down by subagent
-func (s *sqliteStorageService) GetSubagentStats(startTime, endTime string) (*model.SubagentStatsResponse, error) {
+func (s *SQLiteStorageService) GetSubagentStats(startTime, endTime string) (*model.SubagentStatsResponse, error) {
 	query := `
 		SELECT
 			COALESCE(subagent_name, '') as subagent_name,
@@ -1093,7 +1165,7 @@ func (s *sqliteStorageService) GetSubagentStats(startTime, endTime string) (*mod
 }
 
 // GetToolStats returns analytics broken down by tool usage
-func (s *sqliteStorageService) GetToolStats(startTime, endTime string) (*model.ToolStatsResponse, error) {
+func (s *SQLiteStorageService) GetToolStats(startTime, endTime string) (*model.ToolStatsResponse, error) {
 	query := `
 		SELECT tools_used, tool_call_count
 		FROM requests
@@ -1152,7 +1224,7 @@ func (s *sqliteStorageService) GetToolStats(startTime, endTime string) (*model.T
 }
 
 // GetPerformanceStats returns response time analytics by provider/model
-func (s *sqliteStorageService) GetPerformanceStats(startTime, endTime string) (*model.PerformanceStatsResponse, error) {
+func (s *SQLiteStorageService) GetPerformanceStats(startTime, endTime string) (*model.PerformanceStatsResponse, error) {
 	query := `
 		SELECT
 			COALESCE(provider, 'unknown') as provider,
@@ -1260,4 +1332,109 @@ func percentileInt64(sorted []int64, p int) int64 {
 		idx = len(sorted) - 1
 	}
 	return sorted[idx]
+}
+
+// SearchConversations performs FTS5 search on conversation content
+func (s *SQLiteStorageService) SearchConversations(opts model.SearchOptions) (*model.SearchResults, error) {
+	// Build FTS5 query - convert user input to OR logic for multi-term searches
+	terms := strings.Fields(opts.Query)
+	if len(terms) == 0 {
+		return &model.SearchResults{
+			Query:   opts.Query,
+			Results: []*model.ConversationMatch{},
+			Total:   0,
+			Limit:   opts.Limit,
+			Offset:  opts.Offset,
+		}, nil
+	}
+
+	// Escape FTS5 special characters and build OR query
+	var escapedTerms []string
+	for _, term := range terms {
+		// Escape double quotes by doubling them
+		escaped := strings.ReplaceAll(term, `"`, `""`)
+		escapedTerms = append(escapedTerms, fmt.Sprintf(`"%s"`, escaped))
+	}
+	ftsQuery := strings.Join(escapedTerms, " OR ")
+
+	// Build the main query
+	query := `
+		SELECT
+			c.id AS conversation_id,
+			c.project_name,
+			c.project_path,
+			c.end_time AS last_activity,
+			COUNT(f.rowid) AS match_count
+		FROM conversations_fts f
+		JOIN conversations c ON f.conversation_id = c.id
+		WHERE conversations_fts MATCH ?
+	`
+	args := []interface{}{ftsQuery}
+
+	// Add project filter if specified
+	if opts.ProjectPath != "" {
+		query += " AND c.project_path = ?"
+		args = append(args, opts.ProjectPath)
+	}
+
+	query += `
+		GROUP BY c.id
+		ORDER BY match_count DESC, c.end_time DESC
+	`
+
+	// Get total count first
+	countQuery := strings.Replace(query,
+		"SELECT\n\t\t\tc.id AS conversation_id,\n\t\t\tc.project_name,\n\t\t\tc.project_path,\n\t\t\tc.end_time AS last_activity,\n\t\t\tCOUNT(f.rowid) AS match_count",
+		"SELECT COUNT(DISTINCT c.id)",
+		1)
+
+	// Remove ORDER BY and GROUP BY for count query
+	countQuery = strings.Split(countQuery, "GROUP BY")[0]
+
+	var total int
+	if err := s.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return nil, fmt.Errorf("failed to get total count: %w", err)
+	}
+
+	// Add pagination
+	query += " LIMIT ? OFFSET ?"
+	args = append(args, opts.Limit, opts.Offset)
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query conversations: %w", err)
+	}
+	defer rows.Close()
+
+	var results []*model.ConversationMatch
+	for rows.Next() {
+		var match model.ConversationMatch
+		var lastActivity sql.NullString
+
+		if err := rows.Scan(
+			&match.ConversationID,
+			&match.ProjectName,
+			&match.ProjectPath,
+			&lastActivity,
+			&match.MatchCount,
+		); err != nil {
+			continue
+		}
+
+		if lastActivity.Valid {
+			if t, err := time.Parse(time.RFC3339, lastActivity.String); err == nil {
+				match.LastActivity = t
+			}
+		}
+
+		results = append(results, &match)
+	}
+
+	return &model.SearchResults{
+		Query:   opts.Query,
+		Results: results,
+		Total:   total,
+		Limit:   opts.Limit,
+		Offset:  opts.Offset,
+	}, nil
 }

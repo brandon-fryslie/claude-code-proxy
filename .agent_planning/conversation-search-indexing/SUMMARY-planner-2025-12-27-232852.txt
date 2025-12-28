@@ -1,0 +1,4 @@
+Agent: status-planner | 2025-12-27 23:28:52
+Topic: conversation-search-indexing
+Files: PLAN-2025-12-27-232852.md, DOD-2025-12-27-232852.md
+Items: 3 (P0: 1, P1: 1, P2: 1)

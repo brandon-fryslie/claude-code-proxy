@@ -30,6 +30,15 @@
   - Add model filter to request list
   - Add endpoint filter option
 
+- **conversation-search-indexing** [PROPOSED]
+  - Epic: `brandon-fryslie_claude-code-proxy-d0o`
+  - Decision: SQLite FTS5 (research completed 2025-12-27)
+  - Add `conversations` + `conversations_fts` tables to SQLite
+  - File watcher (fsnotify) for ~/.claude/projects/ indexing
+  - `/api/conversations/search?q=...` endpoint
+  - Full-text search across message content, tool names, metadata
+  - Tradeoffs: No fuzzy search, manual snippet extraction
+
 ---
 
 ## Phase 2: Rich Content Display [ACTIVE]

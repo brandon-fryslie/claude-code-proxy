@@ -30,4 +30,7 @@ type StorageService interface {
 	GetSubagentStats(startTime, endTime string) (*model.SubagentStatsResponse, error)
 	GetToolStats(startTime, endTime string) (*model.ToolStatsResponse, error)
 	GetPerformanceStats(startTime, endTime string) (*model.PerformanceStatsResponse, error)
+
+	// Conversation search
+	SearchConversations(opts model.SearchOptions) (*model.SearchResults, error)
 }

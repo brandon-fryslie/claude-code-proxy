@@ -293,3 +293,78 @@ func (cs *conversationService) parseConversationFile(filePath, projectPath strin
 		FileModTime:  fileInfo.ModTime(),
 	}, nil
 }
+
+// ExtractMessageContent extracts searchable text and tool names from a ConversationMessage.
+// Returns the text content, list of tool names, and any error encountered.
+//
+// Message format variants discovered:
+// - user messages: { "role": "user", "content": "text" }
+// - assistant messages: { "role": "assistant", "content": [{"type": "text", "text": "..."}, {"type": "tool_use", "name": "tool_name", ...}] }
+// - system messages: similar to assistant
+func ExtractMessageContent(msg *ConversationMessage) (text string, toolNames []string, err error) {
+	if msg == nil || len(msg.Message) == 0 {
+		return "", nil, nil
+	}
+
+	// Try to parse the message field
+	var messageData map[string]interface{}
+	if err := json.Unmarshal(msg.Message, &messageData); err != nil {
+		return "", nil, fmt.Errorf("failed to parse message: %w", err)
+	}
+
+	// Extract content field
+	content, ok := messageData["content"]
+	if !ok {
+		return "", nil, nil
+	}
+
+	var textParts []string
+	toolNamesSet := make(map[string]bool)
+
+	// Handle content as string (simple case)
+	if contentStr, ok := content.(string); ok {
+		return contentStr, nil, nil
+	}
+
+	// Handle content as array of blocks
+	if contentArray, ok := content.([]interface{}); ok {
+		for _, block := range contentArray {
+			blockMap, ok := block.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			blockType, _ := blockMap["type"].(string)
+
+			switch blockType {
+			case "text":
+				if text, ok := blockMap["text"].(string); ok {
+					textParts = append(textParts, text)
+				}
+			case "tool_use":
+				if toolName, ok := blockMap["name"].(string); ok {
+					toolNamesSet[toolName] = true
+				}
+			case "tool_result":
+				// Extract tool result content (truncate if too large)
+				if result, ok := blockMap["content"]; ok {
+					if resultStr, ok := result.(string); ok {
+						// Truncate large tool results to avoid bloating the index
+						if len(resultStr) > 500 {
+							resultStr = resultStr[:500]
+						}
+						textParts = append(textParts, resultStr)
+					}
+				}
+			}
+		}
+	}
+
+	// Convert tool names set to slice
+	for toolName := range toolNamesSet {
+		toolNames = append(toolNames, toolName)
+	}
+
+	text = strings.Join(textParts, " ")
+	return text, toolNames, nil
+}

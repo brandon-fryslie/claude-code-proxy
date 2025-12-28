@@ -1,0 +1,34 @@
+Agent: project-evaluator | 2025-12-27 23:30:00
+Scope: feature/conversation-search-indexing
+Completion: 0% backend (frontend 100%) | Gaps: 5 critical | Test Quality: N/A (not started)
+Reused: 1 finding (WORK-EVALUATION conversation-browser) | Fresh: 8 findings
+Cache updated: [conversation-loading.md, sqlite-fts5-support.md] in eval-cache/
+Ambiguities: 4 found | Workflow: PAUSE (4 questions need answers before implementation)
+
+CRITICAL FINDINGS:
+1. JSONL message format undocumented (HIGH RISK) - Message field is json.RawMessage, structure varies by Type
+2. No database schema exists for conversations or FTS5 tables
+3. No JSONL content parser to extract searchable text
+4. No file watcher service (fsnotify not installed)
+5. No search API endpoint or implementation
+
+VERIFIED READY:
+- SQLite FTS5 support confirmed (ENABLE_FTS5 in compile options)
+- go-sqlite3 v1.14.28 with full FTS5 support
+- ConversationService complete for loading JSONL files
+- Frontend conversation browser complete with client-side search
+- Migration system ready for adding new tables
+
+AMBIGUITIES REQUIRING ANSWERS:
+1. When to trigger initial indexing (startup vs manual vs lazy)
+2. Search scope - index tool results? (can be 10x larger)
+3. File watch debounce delay (2s vs 10s vs adaptive)
+4. Pagination defaults (20 vs 50 vs 100 results per page)
+
+RECOMMENDED APPROACH:
+Research-first: Reverse engineer JSONL message format from real files (4-6 hours)
+Then: Answer ambiguity questions
+Then: Implement in 5 phases (24-36 hours total)
+
+NEXT ACTION:
+/do:research "JSONL message format in Claude Code conversation logs" OR answer ambiguity questions

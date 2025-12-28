@@ -984,3 +984,44 @@ func (h *Handler) GetConversationsByProject(w http.ResponseWriter, r *http.Reque
 
 	writeJSONResponse(w, conversations)
 }
+
+// SearchConversations performs full-text search on conversation content
+func (h *Handler) SearchConversations(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		writeErrorResponse(w, "Query parameter 'q' is required", http.StatusBadRequest)
+		return
+	}
+
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 200 {
+			limit = parsed
+		}
+	}
+
+	offset := 0
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if parsed, err := strconv.Atoi(o); err == nil && parsed >= 0 {
+			offset = parsed
+		}
+	}
+
+	projectPath := r.URL.Query().Get("project")
+
+	opts := model.SearchOptions{
+		Query:       query,
+		ProjectPath: projectPath,
+		Limit:       limit,
+		Offset:      offset,
+	}
+
+	results, err := h.storageService.SearchConversations(opts)
+	if err != nil {
+		log.Printf("❌ Error searching conversations: %v", err)
+		writeErrorResponse(w, "Failed to search conversations", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSONResponse(w, results)
+}

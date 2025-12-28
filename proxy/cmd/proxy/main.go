@@ -56,6 +56,20 @@ func main() {
 	}
 	logger.Println("🗿 SQLite database ready")
 
+	// Start conversation indexer
+	sqliteStorage, ok := storageService.(*service.SQLiteStorageService)
+	if ok {
+		indexer, err := service.NewConversationIndexer(sqliteStorage)
+		if err != nil {
+			logger.Printf("⚠️  Failed to create conversation indexer: %v", err)
+		} else {
+			if err := indexer.Start(); err != nil {
+				logger.Printf("⚠️  Failed to start conversation indexer: %v", err)
+			}
+			defer indexer.Stop()
+		}
+	}
+
 	h := handler.New(storageService, logger, modelRouter, cfg)
 
 	r := mux.NewRouter()
@@ -90,6 +104,7 @@ func main() {
 	r.HandleFunc("/api/conversations", h.GetConversations).Methods("GET")
 	r.HandleFunc("/api/conversations/{id}", h.GetConversationByID).Methods("GET")
 	r.HandleFunc("/api/conversations/project", h.GetConversationsByProject).Methods("GET")
+	r.HandleFunc("/api/conversations/search", h.SearchConversations).Methods("GET")
 
 	// V2 API - cleaner response format for new dashboard
 	r.HandleFunc("/api/v2/requests/summary", h.GetRequestsSummaryV2).Methods("GET")
@@ -99,7 +114,7 @@ func main() {
 	r.HandleFunc("/api/v2/stats", h.GetWeeklyStatsV2).Methods("GET")
 	r.HandleFunc("/api/v2/stats/hourly", h.GetHourlyStatsV2).Methods("GET")
 	r.HandleFunc("/api/v2/stats/models", h.GetModelStatsV2).Methods("GET")
-	r.HandleFunc("/api/v2/stats/providers", h.GetProviderStatsV2).Methods("GET")
+	r.HandleFunc("/api/v2/stats/providers", h.GetProvidersV2).Methods("GET")
 	r.HandleFunc("/api/v2/stats/subagents", h.GetSubagentStatsV2).Methods("GET")
 	r.HandleFunc("/api/v2/stats/performance", h.GetPerformanceStatsV2).Methods("GET")
 

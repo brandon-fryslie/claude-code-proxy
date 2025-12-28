@@ -300,9 +300,9 @@ type SubagentStatsResponse struct {
 
 // Tool analytics
 type ToolStats struct {
-	ToolName     string `json:"toolName"`
-	UsageCount   int    `json:"usageCount"`   // How many requests included this tool
-	CallCount    int    `json:"callCount"`    // How many times tool was called in responses
+	ToolName           string  `json:"toolName"`
+	UsageCount         int     `json:"usageCount"`   // How many requests included this tool
+	CallCount          int     `json:"callCount"`    // How many times tool was called in responses
 	AvgCallsPerRequest float64 `json:"avgCallsPerRequest"`
 }
 
@@ -314,18 +314,42 @@ type ToolStatsResponse struct {
 
 // Performance analytics
 type PerformanceStats struct {
-	Provider       string  `json:"provider"`
-	Model          string  `json:"model"`
-	AvgResponseMs  int64   `json:"avgResponseMs"`
-	P50ResponseMs  int64   `json:"p50ResponseMs"`
-	P95ResponseMs  int64   `json:"p95ResponseMs"`
-	P99ResponseMs  int64   `json:"p99ResponseMs"`
-	AvgFirstByteMs int64   `json:"avgFirstByteMs"`
-	RequestCount   int     `json:"requestCount"`
+	Provider       string `json:"provider"`
+	Model          string `json:"model"`
+	AvgResponseMs  int64  `json:"avgResponseMs"`
+	P50ResponseMs  int64  `json:"p50ResponseMs"`
+	P95ResponseMs  int64  `json:"p95ResponseMs"`
+	P99ResponseMs  int64  `json:"p99ResponseMs"`
+	AvgFirstByteMs int64  `json:"avgFirstByteMs"`
+	RequestCount   int    `json:"requestCount"`
 }
 
 type PerformanceStatsResponse struct {
 	Stats     []PerformanceStats `json:"stats"`
 	StartTime string             `json:"startTime"`
 	EndTime   string             `json:"endTime"`
+}
+
+// Conversation search types
+type SearchOptions struct {
+	Query       string
+	ProjectPath string
+	Limit       int
+	Offset      int
+}
+
+type SearchResults struct {
+	Query   string               `json:"query"`
+	Results []*ConversationMatch `json:"results"`
+	Total   int                  `json:"total"`
+	Limit   int                  `json:"limit"`
+	Offset  int                  `json:"offset"`
+}
+
+type ConversationMatch struct {
+	ConversationID string    `json:"conversationId"`
+	ProjectName    string    `json:"projectName"`
+	ProjectPath    string    `json:"projectPath"`
+	MatchCount     int       `json:"matchCount"`
+	LastActivity   time.Time `json:"lastActivity"`
 }
