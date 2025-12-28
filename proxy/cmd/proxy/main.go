@@ -102,14 +102,15 @@ func main() {
 	r.HandleFunc("/api/stats/performance", h.GetPerformanceStats).Methods("GET")
 	r.HandleFunc("/api/requests", h.DeleteRequests).Methods("DELETE")
 	r.HandleFunc("/api/conversations", h.GetConversations).Methods("GET")
-	r.HandleFunc("/api/conversations/{id}", h.GetConversationByID).Methods("GET")
-	r.HandleFunc("/api/conversations/project", h.GetConversationsByProject).Methods("GET")
 	r.HandleFunc("/api/conversations/search", h.SearchConversations).Methods("GET")
+	r.HandleFunc("/api/conversations/project", h.GetConversationsByProject).Methods("GET")
+	r.HandleFunc("/api/conversations/{id}", h.GetConversationByID).Methods("GET")
 
 	// V2 API - cleaner response format for new dashboard
 	r.HandleFunc("/api/v2/requests/summary", h.GetRequestsSummaryV2).Methods("GET")
 	r.HandleFunc("/api/v2/requests/{id}", h.GetRequestByIDV2).Methods("GET")
 	r.HandleFunc("/api/v2/conversations", h.GetConversationsV2).Methods("GET")
+	r.HandleFunc("/api/v2/conversations/search", h.SearchConversations).Methods("GET")
 	r.HandleFunc("/api/v2/conversations/{id}", h.GetConversationByIDV2).Methods("GET")
 	r.HandleFunc("/api/v2/stats", h.GetWeeklyStatsV2).Methods("GET")
 	r.HandleFunc("/api/v2/stats/hourly", h.GetHourlyStatsV2).Methods("GET")

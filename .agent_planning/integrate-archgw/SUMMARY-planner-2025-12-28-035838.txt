@@ -1,0 +1,5 @@
+Agent: status-planner | 2025-12-28-035838
+Topic: integrate-archgw
+Files: PLAN-2025-12-28-035838.md, DOD-2025-12-28-035838.md
+Items: 13 (P0: 3, P1: 8, P2: 2)
+Phases: 4 (Foundation, Core Integration, Advanced Routing, Dashboard & Guardrails)
