@@ -6,8 +6,7 @@
 .gitignore
 .gitattributes
 
-# Docker
-Dockerfile
+# Docker (keep docker/ directory for multi-service builds)
 .dockerignore
 docker-compose*.yml
 

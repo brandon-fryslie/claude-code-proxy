@@ -1,0 +1,68 @@
+Agent: iterative-implementer | 2025-12-28 15:15:00
+Mode: manual
+Completed: Phase 0.2 Design | Files: 1 | Commits: 1
+Tests: N/A (design phase)
+Cache invalidated: N/A
+Status: complete
+
+Phase 0.2 Complete - Ready for Phase 1.1 (Implementation)
+
+Work Completed:
+1. Analyzed existing provider implementations (anthropic.go, openai.go)
+2. Studied ModelRouter and config schema
+3. Designed PlanoProvider architecture
+4. Defined configuration schema for Plano provider
+5. Documented format conversion strategy (reuse OpenAI logic)
+6. Specified error handling approach
+7. Created comprehensive DESIGN-archgw-provider.md (1200+ lines)
+
+Key Design Decisions:
+
+1. Architecture:
+   - Plano as separate Provider (not reusing OpenAIProvider)
+   - Follows existing Provider interface
+   - Reuses 600+ lines of conversion logic from openai.go
+   - No changes to ModelRouter or config validation
+
+2. Configuration:
+   providers:
+     plano:
+       base_url: "http://localhost:8080"
+       format: "openai"  # Plano uses OpenAI format
+
+   subagents:
+     mappings:
+       planner: "plano:gemini/gemini-2.0-flash-exp"
+
+3. Format Conversion:
+   - Reuse convertAnthropicToOpenAI() - no changes
+   - Reuse transformOpenAIResponseToAnthropic() - no changes
+   - Reuse transformOpenAIStreamToAnthropic() - no changes
+   - All tool calls, streaming, edge cases already handled
+
+4. Implementation Approach:
+   - Copy openai.go → plano.go (~250 lines)
+   - Remove Authorization header (Plano handles auth)
+   - Update error messages to reference "Plano"
+   - Register in main.go (~10 lines)
+   - Update config.yaml.example (~15 lines)
+   - Total new code: ~275 lines
+   - Total reused code: ~600 lines
+
+5. Error Handling (Phase 1):
+   - Convert all errors to Anthropic format
+   - Return to client (no fallback/retry)
+   - Circuit breakers deferred to Phase 2
+
+Next Steps (Phase 1.1 - Implementation):
+1. Create proxy/internal/provider/plano.go
+2. Update cmd/proxy/main.go (register provider)
+3. Update config.yaml.example (add plano config)
+4. Write unit tests (proxy/internal/provider/plano_test.go)
+5. Manual integration testing with real Plano
+6. Verify existing tests still pass
+
+Files Created:
+- .agent_planning/integrate-archgw/DESIGN-archgw-provider.md (comprehensive design)
+
+Commit: 2fa6026

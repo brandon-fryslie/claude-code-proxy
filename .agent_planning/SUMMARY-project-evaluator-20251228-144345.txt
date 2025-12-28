@@ -1,0 +1,55 @@
+Agent: project-evaluator | 2025-12-28-144345
+Scope: service-split architecture analysis
+Topic: Zero-downtime deployment via service separation
+
+Analysis: FEASIBLE with clear path forward
+
+Key Findings:
+- Natural split exists between proxy (critical) and data processing (frequent changes)
+- Current code has clean boundaries: 0% overlap in HTTP endpoints
+- SQLite with WAL mode already configured for concurrent access
+- ~7000 LOC splits cleanly: ~2000 to proxy-core, ~5000 to proxy-data
+
+Coupling Points:
+- Shared SQLite database (mitigated by WAL mode)
+- Shared data models (trivial - Go modules)
+- Web app API configuration (needs reverse proxy OR dual URLs)
+
+Recommended Approach:
+Phase 1 (Immediate): Shared database split
+  - Two binaries from same codebase
+  - Both access same SQLite DB (WAL mode supports this)
+  - Add nginx reverse proxy for web app
+  - Effort: ~3 hours for working prototype
+
+Phase 2 (Future, if needed): HTTP API or message queue
+  - Only if scaling to multiple hosts
+  - Or if SQLite contention detected
+  - Or if want buffered writes during restarts
+
+Ambiguities Found: 4
+1. Web app API routing preference (reverse proxy vs dual clients)
+2. Conversation indexer criticality (fail-fast or continue?)
+3. Database file path strategy (absolute vs relative)
+4. Graceful shutdown expectations (stale stats OK during restart?)
+
+Testing Strategy:
+- Isolation tests (kill one service, verify other works)
+- Concurrent write tests (proxy-core + indexer simultaneously)
+- End-to-end flow verification
+- Load testing to establish baseline
+
+Risks:
+- SQLite write conflicts: LOW (WAL mode designed for this)
+- Config drift: MEDIUM (shared packages mitigate)
+- Web app breaks: HIGH (needs URL routing update)
+- Lost functionality: LOW (all code preserved, just reorganized)
+
+Workflow: CONTINUE
+- Architecture is sound
+- Clear implementation path
+- Questions are about deployment preferences, not blockers
+- Can prototype in 3 hours to validate approach
+
+Next Action:
+User should answer 4 clarification questions (web routing, indexer criticality, DB path, shutdown behavior), then proceed to implementation phase.

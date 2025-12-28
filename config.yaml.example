@@ -1,5 +1,26 @@
 # LLM Proxy Configuration Example
 
+# Server configuration
+server:
+  port: "3001"  # For monolith; split services use PROXY_CORE_PORT/PROXY_DATA_PORT env vars
+  timeouts:
+    read: "600s"
+    write: "600s"
+    idle: "600s"
+
+# Storage configuration
+# IMPORTANT: For split services, both proxy-core and proxy-data must access the same database.
+# Use an absolute path or DATA_DIR environment variable to ensure consistency.
+storage:
+  # Option 1: Absolute path (recommended for production)
+  # db_path: "/data/claude-proxy/requests.db"
+
+  # Option 2: Relative path (default, works for local development)
+  db_path: "requests.db"
+
+  # Environment variable override: set DB_PATH to override this value
+  # Example: DB_PATH=/data/requests.db ./bin/proxy-core
+
 # Provider configurations
 # New style: allows declaring arbitrary providers and their "format" will be either "openai" or "anthropic"
 providers:

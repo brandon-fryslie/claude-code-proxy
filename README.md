@@ -118,8 +118,49 @@ Claude Code Proxy serves three main purposes:
          - WEB_PORT=5173
          - DB_PATH=/app/data/requests.db
    ```
-   
+
    Then run: `docker-compose up`
+
+#### Option 3: Docker Split Architecture (Production)
+
+For zero-downtime deployments, use the split architecture with separate containers:
+
+1. **Clone and configure**
+   ```bash
+   git clone https://github.com/seifghazi/claude-code-proxy.git
+   cd claude-code-proxy
+   cp config.yaml.example config.yaml
+   mkdir -p data
+   ```
+
+2. **Run split services with Docker Compose**
+   ```bash
+   # Build and start all services
+   docker-compose -f docker-compose.split.yml up --build
+
+   # Run in detached mode
+   docker-compose -f docker-compose.split.yml up -d
+   ```
+
+3. **Zero-downtime updates**
+   ```bash
+   # Update proxy-data without affecting the main proxy
+   docker-compose -f docker-compose.split.yml up -d --no-deps --build proxy-data
+
+   # Update proxy-core (rare, but when needed)
+   docker-compose -f docker-compose.split.yml up -d --no-deps --build proxy-core
+   ```
+
+4. **Access points (Docker split mode)**
+   - **Unified Endpoint**: http://localhost:3000 (Caddy)
+   - **Health Check**: http://localhost:3000/health
+
+5. **Full development stack** (includes web dashboards)
+   ```bash
+   docker-compose -f docker-compose.dev.yml up --build
+   ```
+   - Web Dashboard: http://localhost:5173
+   - New Dashboard: http://localhost:5174
 
 ### Using with Claude Code
 
@@ -151,15 +192,56 @@ make run-proxy
 make run-web
 ```
 
+### Split Architecture (Zero-Downtime Deployments)
+
+For production deployments requiring zero-downtime updates, the proxy can be split into two services:
+
+- **proxy-core** (port 3001): Lightweight proxy that handles API forwarding and data recording. Rarely needs updates.
+- **proxy-data** (port 3002): Dashboard APIs, statistics, conversation indexing. Can be updated independently.
+
+**Running Split Architecture:**
+
+```bash
+# Build split services
+make build-split
+
+# Run with Caddy reverse proxy (unified endpoint on port 3000)
+make dev-split
+# or
+./run-split.sh
+```
+
+**Access Points (Split Mode):**
+- **Unified Endpoint**: http://localhost:3000 (Caddy routes to appropriate service)
+- **proxy-core direct**: http://localhost:3001 (API proxy)
+- **proxy-data direct**: http://localhost:3002 (Dashboard APIs)
+- **Web Dashboard**: http://localhost:5173
+
+**Requirements:**
+- [Caddy](https://caddyserver.com/docs/install) for reverse proxy routing
+
 ### Available Make Commands
 
 ```bash
-make install    # Install all dependencies
-make build      # Build both services
-make dev        # Run in development mode
-make clean      # Clean build artifacts
-make db-reset   # Reset database
-make help       # Show all commands
+# Setup
+make install        # Install all dependencies
+
+# Build
+make build          # Build monolith proxy + web
+make build-proxy    # Build monolith proxy only
+make build-split    # Build split services (proxy-core + proxy-data)
+
+# Run (Development)
+make dev            # Run monolith (proxy + web + dashboard)
+make dev-split      # Run split architecture (Caddy + services + web)
+make run-proxy      # Run monolith proxy only
+make run-proxy-core # Run proxy-core only
+make run-proxy-data # Run proxy-data only
+
+# Cleanup
+make clean          # Clean build artifacts
+make db-reset       # Reset database
+make help           # Show all commands
 ```
 
 ## Configuration
@@ -278,15 +360,33 @@ docker run -p 3001:3001 -p 5173:5173 \
 ```
 claude-code-proxy/
 ├── proxy/                  # Go proxy server
-│   ├── cmd/               # Application entry points
-│   ├── internal/          # Internal packages
-│   └── go.mod            # Go dependencies
+│   ├── cmd/
+│   │   ├── proxy/         # Monolith entry point
+│   │   ├── proxy-core/    # Split: lightweight proxy (API forwarding)
+│   │   └── proxy-data/    # Split: data service (dashboard APIs)
+│   ├── internal/
+│   │   ├── handler/
+│   │   │   ├── handlers.go      # Monolith handler
+│   │   │   ├── core_handler.go  # Split: proxy-core handlers
+│   │   │   └── data_handler.go  # Split: proxy-data handlers
+│   │   ├── service/
+│   │   ├── config/
+│   │   └── provider/
+│   └── go.mod
 ├── web/                   # React Remix frontend
-│   ├── app/              # Remix application
-│   └── package.json      # Node dependencies
-├── run.sh                # Start script
-├── .env.example          # Environment template
-└── README.md            # This file
+├── dashboard/             # New React dashboard
+├── docker/                # Docker configurations
+│   ├── Dockerfile.proxy-core   # proxy-core container
+│   ├── Dockerfile.proxy-data   # proxy-data container
+│   └── Caddyfile              # Caddy config for Docker
+├── Dockerfile            # Monolith container
+├── docker-compose.split.yml   # Split architecture (production)
+├── docker-compose.dev.yml     # Full dev stack with dashboards
+├── Caddyfile             # Reverse proxy config (local)
+├── run.sh                # Start script (monolith)
+├── run-split.sh          # Start script (split architecture)
+├── config.yaml.example   # Configuration template
+└── README.md
 ```
 
 ## Features in Detail

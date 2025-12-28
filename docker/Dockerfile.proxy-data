@@ -1,0 +1,60 @@
+# Dockerfile for proxy-data - Dashboard API and data processing service
+# This service handles /api/*, conversation indexing, and statistics
+# Can be updated independently without affecting the proxy
+
+FROM golang:1.21-alpine AS builder
+
+WORKDIR /app
+
+# Install build dependencies including gcc for CGO (SQLite)
+RUN apk add --no-cache git gcc musl-dev sqlite-dev
+
+# Copy Go modules
+COPY proxy/go.mod proxy/go.sum ./proxy/
+WORKDIR /app/proxy
+RUN go mod download
+
+# Copy Go source code
+COPY proxy/ ./
+
+# Build proxy-data with CGO enabled for SQLite and FTS5 support
+RUN CGO_ENABLED=1 GOOS=linux go build -tags "fts5" -a -installsuffix cgo -o /app/bin/proxy-data cmd/proxy-data/main.go
+
+# Production runtime
+FROM alpine:3.19
+
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apk add --no-cache sqlite-libs ca-certificates tzdata
+
+# Create app user for security
+RUN addgroup -g 1001 -S appgroup && \
+    adduser -S appuser -u 1001 -G appgroup
+
+# Copy built binary
+COPY --from=builder /app/bin/proxy-data ./bin/proxy-data
+RUN chmod +x ./bin/proxy-data
+
+# Create data directory for SQLite database
+RUN mkdir -p /app/data && chown -R appuser:appgroup /app
+
+# Copy config file if present (optional - can be mounted)
+COPY config.yaml* ./
+
+# Environment variables with defaults
+ENV PROXY_DATA_PORT=3002
+ENV DB_PATH=/app/data/requests.db
+
+# Expose port
+EXPOSE 3002
+
+# Switch to app user
+USER appuser
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD wget -qO- http://localhost:3002/health > /dev/null || exit 1
+
+# Run proxy-data
+CMD ["./bin/proxy-data"]

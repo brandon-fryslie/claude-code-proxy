@@ -1,0 +1,59 @@
+# Claude Code Proxy - Caddy Reverse Proxy Configuration
+#
+# This Caddyfile routes requests to the appropriate backend service:
+# - /v1/* routes to proxy-core (port 3001) - lightweight proxy
+# - /api/* routes to proxy-data (port 3002) - dashboard APIs
+# - /health routes to proxy-core for health checks
+#
+# Usage:
+#   caddy run --config Caddyfile
+#   Or in development: caddy run --config Caddyfile --watch
+
+{
+	# Global options
+	admin off  # Disable admin API in production
+}
+
+:3000 {
+	# Enable gzip compression
+	encode gzip
+
+	# Logging
+	log {
+		output stdout
+		format console
+	}
+
+	# Health check - route to proxy-core
+	handle /health {
+		reverse_proxy localhost:3001
+	}
+
+	# Proxy API routes - route to proxy-core
+	handle /v1/* {
+		reverse_proxy localhost:3001 {
+			# Enable streaming for SSE responses
+			flush_interval -1
+		}
+	}
+
+	# Dashboard API routes - route to proxy-data
+	handle /api/* {
+		reverse_proxy localhost:3002
+	}
+
+	# UI routes - route to proxy-data
+	handle /ui {
+		reverse_proxy localhost:3002
+	}
+
+	# Root path - route to proxy-data for UI
+	handle / {
+		reverse_proxy localhost:3002
+	}
+
+	# Fallback - 404 for unmatched routes
+	handle {
+		respond "Not Found" 404
+	}
+}
