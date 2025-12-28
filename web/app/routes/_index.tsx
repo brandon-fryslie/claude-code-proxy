@@ -992,16 +992,16 @@ export default function Index() {
                                     <div className="flex items-center space-x-3 mb-1">
                                       <span
                                         className={`font-mono text-sm font-semibold ${
-                                          summary.model.toLowerCase().includes('opus')
+                                          (summary.model || '').toLowerCase().includes('opus')
                                             ? 'text-purple-600'
-                                            : summary.model.toLowerCase().includes('sonnet')
+                                            : (summary.model || '').toLowerCase().includes('sonnet')
                                             ? 'text-blue-600'
                                             : 'text-green-600'
                                         }`}
                                       >
-                                        {summary.model.toLowerCase().includes('opus')
+                                        {(summary.model || '').toLowerCase().includes('opus')
                                           ? 'Opus'
-                                          : summary.model.toLowerCase().includes('sonnet')
+                                          : (summary.model || '').toLowerCase().includes('sonnet')
                                           ? 'Sonnet'
                                           : 'Haiku'}
                                       </span>

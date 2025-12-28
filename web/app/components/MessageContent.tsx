@@ -14,6 +14,14 @@ interface ContentItem {
   input?: Record<string, any>;
   tool_call_id?: string;
   is_error?: boolean;
+  // Image content properties
+  source?: {
+    type: string;
+    media_type: string;
+    data: string;
+  };
+  data?: string;
+  media_type?: string;
 }
 
 interface MessageContentProps {

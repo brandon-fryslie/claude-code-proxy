@@ -30,137 +30,30 @@ Claude Code Proxy serves three main purposes:
 
 ### Installation
 
-#### Option 1: Local Development
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/seifghazi/claude-code-proxy.git
-   cd claude-code-proxy
-   ```
-
-2. **Configure the proxy**
-   ```bash
-   cp config.yaml.example config.yaml
-   ```
-
-3. **Install and run** (first time)
-   ```bash
-   make install  # Install all dependencies
-   make dev      # Start both services
-   ```
-
-4. **Subsequent runs** (after initial setup)
-   ```bash
-   make dev
-   # or
-   ./run.sh
-   ```
-
-#### Option 2: Docker
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/seifghazi/claude-code-proxy.git
-   cd claude-code-proxy
-   ```
-
-2. **Configure the proxy**
-   ```bash
-   cp config.yaml.example config.yaml
-   # Edit config.yaml as needed
-   ```
-
-3. **Build and run with Docker**
-   ```bash
-   # Build the image
-   docker build -t claude-code-proxy .
-   
-   # Run with default settings
-   docker run -p 3001:3001 -p 5173:5173 claude-code-proxy
-   ```
-
-4. **Run with persistent data and custom configuration**
-   ```bash
-   # Create a data directory for persistent SQLite database
-   mkdir -p ./data
-   
-   # Option 1: Run with config file (recommended)
-   docker run -p 3001:3001 -p 5173:5173 \
-     -v ./data:/app/data \
-     -v ./config.yaml:/app/config.yaml:ro \
-     claude-code-proxy
-   
-   # Option 2: Run with environment variables
-   docker run -p 3001:3001 -p 5173:5173 \
-     -v ./data:/app/data \
-     -e ANTHROPIC_FORWARD_URL=https://api.anthropic.com \
-     -e PORT=3001 \
-     -e WEB_PORT=5173 \
-     claude-code-proxy
-   ```
-
-5. **Docker Compose (alternative)**
-   ```yaml
-   # docker-compose.yml
-   version: '3.8'
-   services:
-     claude-code-proxy:
-       build: .
-       ports:
-         - "3001:3001"
-         - "5173:5173"
-       volumes:
-         - ./data:/app/data
-         - ./config.yaml:/app/config.yaml:ro  # Mount config file
-       environment:
-         - ANTHROPIC_FORWARD_URL=https://api.anthropic.com
-         - PORT=3001
-         - WEB_PORT=5173
-         - DB_PATH=/app/data/requests.db
-   ```
-
-   Then run: `docker-compose up`
-
-#### Option 3: Docker Split Architecture (Production)
-
-For zero-downtime deployments, use the split architecture with separate containers:
-
 1. **Clone and configure**
    ```bash
    git clone https://github.com/seifghazi/claude-code-proxy.git
    cd claude-code-proxy
    cp config.yaml.example config.yaml
-   mkdir -p data
    ```
 
-2. **Run split services with Docker Compose**
+2. **Install dependencies**
    ```bash
-   # Build and start all services
-   docker-compose -f docker-compose.split.yml up --build
-
-   # Run in detached mode
-   docker-compose -f docker-compose.split.yml up -d
+   just install
    ```
 
-3. **Zero-downtime updates**
+3. **Run** (choose one)
    ```bash
-   # Update proxy-data without affecting the main proxy
-   docker-compose -f docker-compose.split.yml up -d --no-deps --build proxy-data
-
-   # Update proxy-core (rare, but when needed)
-   docker-compose -f docker-compose.split.yml up -d --no-deps --build proxy-core
+   just run      # Local development (requires Caddy)
+   just docker   # Docker backend + local frontends (best HMR)
    ```
 
-4. **Access points (Docker split mode)**
-   - **Unified Endpoint**: http://localhost:3000 (Caddy)
-   - **Health Check**: http://localhost:3000/health
+### Prerequisites
 
-5. **Full development stack** (includes web dashboards)
-   ```bash
-   docker-compose -f docker-compose.dev.yml up --build
-   ```
-   - Web Dashboard: http://localhost:5173
-   - New Dashboard: http://localhost:5174
+- **[just](https://github.com/casey/just)** - Command runner (`brew install just`)
+- **Go 1.20+** and **Node.js 18+** (for local dev)
+- **[Caddy](https://caddyserver.com/docs/install)** (for `just run`)
+- **Docker** (for `just docker`)
 
 ### Using with Claude Code
 
@@ -178,71 +71,36 @@ This will route Claude Code's requests through the proxy for monitoring.
 - **API Proxy**: http://localhost:3001
 - **Health Check**: http://localhost:3001/health
 
-## Advanced Usage
+## Commands
 
-### Running Services Separately
-
-If you need to run services independently:
+All operations use `just`. Run `just` to see available commands.
 
 ```bash
-# Run proxy only
-make run-proxy
-
-# Run web interface only (in another terminal)
-make run-web
+just install       # Install dependencies (first-time setup)
+just build         # Build everything (Go binaries + web assets)
+just run           # Run in development mode (Caddy + services + dashboards)
+just docker        # Run with Docker (backend containers + local frontends for HMR)
+just stop          # Stop Docker services
+just restart-data  # Restart data service (zero-downtime update)
+just test          # Run all tests
+just check         # Lint and type check
+just db            # Reset database
+just clean         # Clean all build artifacts and Docker resources
 ```
 
-### Split Architecture (Zero-Downtime Deployments)
+## Architecture
 
-For production deployments requiring zero-downtime updates, the proxy can be split into two services:
+The proxy runs as two services for zero-downtime deployments:
 
-- **proxy-core** (port 3001): Lightweight proxy that handles API forwarding and data recording. Rarely needs updates.
-- **proxy-data** (port 3002): Dashboard APIs, statistics, conversation indexing. Can be updated independently.
+- **proxy-core** (port 3001): Lightweight API proxy. Rarely changes.
+- **proxy-data** (port 3002): Dashboard APIs, statistics, indexing. Updated frequently.
 
-**Running Split Architecture:**
+Caddy (port 3000) routes requests to the appropriate service.
 
-```bash
-# Build split services
-make build-split
-
-# Run with Caddy reverse proxy (unified endpoint on port 3000)
-make dev-split
-# or
-./run-split.sh
-```
-
-**Access Points (Split Mode):**
-- **Unified Endpoint**: http://localhost:3000 (Caddy routes to appropriate service)
-- **proxy-core direct**: http://localhost:3001 (API proxy)
-- **proxy-data direct**: http://localhost:3002 (Dashboard APIs)
+**Access Points:**
+- **API**: http://localhost:3000 (unified) or http://localhost:3001 (direct)
 - **Web Dashboard**: http://localhost:5173
-
-**Requirements:**
-- [Caddy](https://caddyserver.com/docs/install) for reverse proxy routing
-
-### Available Make Commands
-
-```bash
-# Setup
-make install        # Install all dependencies
-
-# Build
-make build          # Build monolith proxy + web
-make build-proxy    # Build monolith proxy only
-make build-split    # Build split services (proxy-core + proxy-data)
-
-# Run (Development)
-make dev            # Run monolith (proxy + web + dashboard)
-make dev-split      # Run split architecture (Caddy + services + web)
-make run-proxy      # Run monolith proxy only
-make run-proxy-core # Run proxy-core only
-make run-proxy-data # Run proxy-data only
-
-# Cleanup
-make clean          # Clean build artifacts
-make db-reset       # Reset database
-make help           # Show all commands
-```
+- **New Dashboard**: http://localhost:5174
 
 ## Configuration
 

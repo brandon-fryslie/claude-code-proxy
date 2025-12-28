@@ -9,11 +9,11 @@ interface ModelStats {
 
 interface DashboardStats {
   dailyStats: { date: string; tokens: number; requests: number; models?: Record<string, ModelStats>; }[];
-  hourlyStats: { hour: number; tokens: number; requests: number; models?: Record<string, ModelStats>; }[];
-  modelStats: { model: string; tokens: number; requests: number; }[];
-  todayTokens: number;
-  todayRequests: number;
-  avgResponseTime: number;
+  hourlyStats?: { hour: number; tokens: number; requests: number; models?: Record<string, ModelStats>; }[];
+  modelStats?: { model: string; tokens: number; requests: number; }[];
+  todayTokens?: number;
+  todayRequests?: number;
+  avgResponseTime?: number;
 }
 
 interface UsageDashboardProps {
@@ -74,7 +74,7 @@ export function UsageDashboard({ stats, selectedDate = new Date() }: UsageDashbo
       const date = new Date(weekStart);
       date.setDate(date.getDate() + i);
       const dateStr = date.toISOString().split('T')[0];
-      const dayData = dailyMap.get(dateStr) || { tokens: 0, requests: 0 };
+      const dayData = dailyMap.get(dateStr) || { tokens: 0, requests: 0, models: {} as Record<string, ModelStats> };
 
       // Always show short day name (Sun, Mon, Tue, etc.)
       const dayLabel = date.toLocaleDateString('en-US', { weekday: 'short' });
@@ -90,21 +90,21 @@ export function UsageDashboard({ stats, selectedDate = new Date() }: UsageDashbo
     }
 
     // Build 24 hours with data from backend
-    const hours = [];
-    const hourMap = new Map(stats.hourlyStats.map(h => [h.hour, h]));
+    const hours: { hour: number; tokens: number; requests: number; models: Record<string, ModelStats>; }[] = [];
+    const hourMap = new Map((stats.hourlyStats || []).map(h => [h.hour, h]));
 
     for (let h = 0; h < 24; h++) {
-      const hourData = hourMap.get(h) || { tokens: 0, requests: 0, models: {} };
+      const hourData = hourMap.get(h) || { tokens: 0, requests: 0, models: {} as Record<string, ModelStats> };
       hours.push({
         hour: h,
         tokens: hourData.tokens,
         requests: hourData.requests,
-        models: hourData.models || {},
+        models: (hourData.models || {}) as Record<string, ModelStats>,
       });
     }
 
     // Process model stats
-    const models = stats.modelStats.map(m => ({
+    const models = (stats.modelStats || []).map(m => ({
       model: m.model,
       displayName: getModelDisplayName(m.model),
       tokens: m.tokens,
@@ -170,9 +170,9 @@ export function UsageDashboard({ stats, selectedDate = new Date() }: UsageDashbo
       maxDayTokens,
       maxHourTokens,
       maxModelTokens,
-      todayTokens: stats.todayTokens,
-      todayRequests: stats.todayRequests,
-      avgResponseTime: stats.avgResponseTime,
+      todayTokens: stats.todayTokens ?? 0,
+      todayRequests: stats.todayRequests ?? 0,
+      avgResponseTime: stats.avgResponseTime ?? 0,
       weekLabel,
       avgDayTokens,
       currentTimePosition,
