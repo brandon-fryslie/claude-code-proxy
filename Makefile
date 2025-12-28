@@ -15,7 +15,7 @@ build: build-proxy build-web
 
 build-proxy:
 	@echo "🔨 Building proxy server..."
-	cd proxy && go build -o ../bin/proxy cmd/proxy/main.go
+	cd proxy && go build -tags "fts5" -o ../bin/proxy cmd/proxy/main.go
 
 build-web:
 	@echo "🔨 Building web interface..."
@@ -28,7 +28,7 @@ dev:
 
 # Run proxy only
 run-proxy:
-	cd proxy && go run cmd/proxy/main.go
+	cd proxy && go run -tags "fts5" cmd/proxy/main.go
 
 # Run web only
 run-web:

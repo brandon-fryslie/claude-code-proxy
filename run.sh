@@ -79,7 +79,7 @@ wait_for_vite_url() {
 echo -e "\n${BLUE}Building proxy server...${NC}"
 cd proxy
 go mod download
-go build -o ../bin/proxy cmd/proxy/main.go
+go build -tags "fts5" -o ../bin/proxy cmd/proxy/main.go
 cd ..
 
 echo -e "${GREEN}Proxy server built${NC}"

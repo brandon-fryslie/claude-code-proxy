@@ -18,7 +18,7 @@ build: build-proxy build-web build-dashboard
 # Build proxy server
 build-proxy:
     @echo "Building proxy server..."
-    cd proxy && go build -o ../bin/proxy cmd/proxy/main.go
+    cd proxy && go build -tags "fts5" -o ../bin/proxy cmd/proxy/main.go
 
 # Build legacy web interface
 build-web:
@@ -36,7 +36,7 @@ dev:
 
 # Run proxy only
 run-proxy:
-    cd proxy && go run cmd/proxy/main.go
+    cd proxy && go run -tags "fts5" cmd/proxy/main.go
 
 # Clean build artifacts
 clean:
@@ -64,7 +64,7 @@ lint:
 
 # Run proxy tests
 test-proxy:
-    cd proxy && go test ./...
+    cd proxy && go test -tags "fts5" ./...
 
 # Run web tests
 test-web:
