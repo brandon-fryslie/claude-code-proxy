@@ -1,26 +1,5 @@
 # LLM Proxy Configuration Example
 
-# Server configuration
-server:
-  port: "3001"  # For monolith; split services use PROXY_CORE_PORT/PROXY_DATA_PORT env vars
-  timeouts:
-    read: "600s"
-    write: "600s"
-    idle: "600s"
-
-# Storage configuration
-# IMPORTANT: For split services, both proxy-core and proxy-data must access the same database.
-# Use an absolute path or DATA_DIR environment variable to ensure consistency.
-storage:
-  # Option 1: Absolute path (recommended for production)
-  # db_path: "/data/claude-proxy/requests.db"
-
-  # Option 2: Relative path (default, works for local development)
-  db_path: "requests.db"
-
-  # Environment variable override: set DB_PATH to override this value
-  # Example: DB_PATH=/data/requests.db ./bin/proxy-core
-
 # Provider configurations
 # New style: allows declaring arbitrary providers and their "format" will be either "openai" or "anthropic"
 providers:
@@ -33,7 +12,7 @@ providers:
     base_url: "https://api.z.ai/api/anthropic"
     api_key: "xxx"
     format: "anthropic" # required
-  
+
   openai:
     api_key: "..."
     base_url: "https://api.openai.com"
@@ -41,15 +20,45 @@ providers:
 
   localllm:
     base_url: "localhost:1234"
-    format: "openai" # required 
+    format: "openai" # required
+
+  # Plano (formerly ArchGW) - Multi-LLM routing proxy
+  # Plano routes requests to 11+ providers: Gemini, DeepSeek, Qwen, Mistral, Groq, etc.
+  # See: https://planoai.dev and https://github.com/katanemo/archgw
+  plano:
+    base_url: "http://localhost:8080"  # Or http://plano:8080 in Docker
+    format: "openai"  # Plano accepts OpenAI-format requests
+    # Note: No api_key needed - Plano reads upstream API keys from environment:
+    #   OPENAI_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY, DASHSCOPE_API_KEY, etc.
 
 # Subagent Configuration
 # New style: We must refer to the specific provider as well as the model
 subagents:
   mappings:
     # <agent name>: "<provider name>:<model name>"
+
+    # OpenAI routing
     code-reviewer: "openai:gpt-4o"
+
+    # Local LLM routing
     planner: "localllm:my-local-agent"
+
+    # Z.ai routing
     janitor: "zai:glm-4.6"
+
+    # Plano routing - Access multiple providers through one proxy
+    # Plano model format: "provider/model-name"
+    # Examples:
+    #   gemini/gemini-2.0-flash-exp    - Google Gemini (fast, experimental)
+    #   deepseek/deepseek-chat         - DeepSeek (cost-effective)
+    #   deepseek/deepseek-coder        - DeepSeek Coder (code-focused)
+    #   qwen/qwen-max                  - Alibaba Qwen (general purpose)
+    #   mistral/mistral-large-latest   - Mistral (high quality)
+    #   groq/llama-3.3-70b-versatile   - Groq (fast inference)
+
+    # Example Plano subagent mappings:
+    # fast-helper: "plano:gemini/gemini-2.0-flash-exp"
+    # code-generator: "plano:deepseek/deepseek-coder"
+    # budget-agent: "plano:qwen/qwen-max"
 
 # NOTE: OLD CONFIGS ARE NOT SUPPORTED.
