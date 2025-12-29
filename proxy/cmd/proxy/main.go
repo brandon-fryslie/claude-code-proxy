@@ -11,6 +11,7 @@ import (
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/seifghazi/claude-code-monitor/internal/config"
 	"github.com/seifghazi/claude-code-monitor/internal/handler"
@@ -124,6 +125,9 @@ func main() {
 	r.HandleFunc("/v1/models", h.Models).Methods("GET")
 	r.HandleFunc("/health", h.Health).Methods("GET")
 
+	// Prometheus metrics endpoint
+	r.Handle("/metrics", promhttp.Handler()).Methods("GET")
+
 	r.HandleFunc("/", h.UI).Methods("GET")
 	r.HandleFunc("/ui", h.UI).Methods("GET")
 	r.HandleFunc("/api/requests", h.GetRequests).Methods("GET")
@@ -177,6 +181,7 @@ func main() {
 		logger.Printf("   - POST http://localhost:%s/v1/messages (Anthropic format)", cfg.Server.Port)
 		logger.Printf("   - GET  http://localhost:%s/v1/models", cfg.Server.Port)
 		logger.Printf("   - GET  http://localhost:%s/health", cfg.Server.Port)
+		logger.Printf("   - GET  http://localhost:%s/metrics (Prometheus metrics)", cfg.Server.Port)
 		logger.Printf("🎨 Web UI available at:")
 		logger.Printf("   - GET  http://localhost:%s/ (Request Visualizer)", cfg.Server.Port)
 		logger.Printf("   - GET  http://localhost:%s/api/requests (Request API)", cfg.Server.Port)

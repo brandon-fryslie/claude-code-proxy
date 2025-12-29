@@ -2,12 +2,14 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"time"
 
 	"github.com/seifghazi/claude-code-monitor/internal/config"
+	"github.com/seifghazi/claude-code-monitor/internal/metrics"
 )
 
 // ResilientProvider wraps a provider with circuit breaker, retry, and fallback logic
@@ -42,6 +44,27 @@ func NewResilientProvider(
 			Timeout:     cfg.CircuitBreaker.TimeoutDuration,
 		}
 		rp.circuitBreaker = NewCircuitBreaker(cbConfig)
+
+		// Set up circuit breaker state change callback to update metrics and log
+		rp.circuitBreaker.SetStateChangeCallback(func(oldState, newState CircuitState) {
+			// Update metrics
+			metrics.UpdateCircuitBreakerState(name, int(newState))
+			metrics.RecordCircuitBreakerStateChange(name, oldState.String(), newState.String())
+
+			// Structured logging for circuit breaker state changes
+			logEvent := map[string]interface{}{
+				"event":      "circuit_breaker_state_change",
+				"provider":   name,
+				"old_state":  oldState.String(),
+				"new_state":  newState.String(),
+				"timestamp":  time.Now().UTC().Format(time.RFC3339),
+			}
+			logJSON, _ := json.Marshal(logEvent)
+			log.Printf("%s", logJSON)
+		})
+
+		// Initialize circuit breaker state metric
+		metrics.UpdateCircuitBreakerState(name, int(StateClosed))
 	}
 
 	// Initialize retry config
@@ -62,8 +85,26 @@ func (rp *ResilientProvider) Name() string {
 
 // ForwardRequest forwards a request with circuit breaker, retry, and fallback logic
 func (rp *ResilientProvider) ForwardRequest(ctx context.Context, req *http.Request) (*http.Response, error) {
+	startTime := time.Now()
+
 	// Try primary provider with circuit breaker and retry
 	resp, err := rp.tryPrimaryProvider(ctx, req)
+
+	// Record request metrics
+	status := "success"
+	if err != nil {
+		status = "error"
+	} else if resp != nil && resp.StatusCode >= 400 {
+		status = fmt.Sprintf("http_%d", resp.StatusCode)
+	}
+
+	duration := time.Since(startTime).Seconds()
+	model := "unknown"
+	// Try to extract model from request context or headers
+	if modelVal := req.Header.Get("X-Model"); modelVal != "" {
+		model = modelVal
+	}
+	metrics.RecordRequest(rp.name, model, status, duration)
 
 	// If primary succeeded or we don't have a fallback, return the result
 	if err == nil || rp.fallbackProvider == nil {
@@ -73,6 +114,20 @@ func (rp *ResilientProvider) ForwardRequest(ctx context.Context, req *http.Reque
 	// If circuit breaker is open or primary failed after retries, try fallback
 	log.Printf("⚠️ Provider '%s' failed, attempting fallback to '%s': %v",
 		rp.name, rp.fallbackProvider.Name(), err)
+
+	// Structured logging for fallback activation
+	logEvent := map[string]interface{}{
+		"event":           "fallback_activated",
+		"from_provider":   rp.name,
+		"to_provider":     rp.fallbackProvider.Name(),
+		"reason":          err.Error(),
+		"timestamp":       time.Now().UTC().Format(time.RFC3339),
+	}
+	logJSON, _ := json.Marshal(logEvent)
+	log.Printf("%s", logJSON)
+
+	// Record fallback metric
+	metrics.RecordFallback(rp.name, rp.fallbackProvider.Name())
 
 	// Try fallback provider (without circuit breaker to avoid cascading failures)
 	return rp.tryFallbackProvider(ctx, req)
@@ -94,6 +149,21 @@ func (rp *ResilientProvider) tryPrimaryProvider(ctx context.Context, req *http.R
 
 		if attempts > 1 {
 			log.Printf("📊 Provider '%s' request completed after %d attempts", rp.name, attempts)
+
+			// Record retry attempts
+			for i := 1; i < attempts; i++ {
+				metrics.RecordRetry(rp.name)
+			}
+
+			// Structured logging for retry attempts
+			logEvent := map[string]interface{}{
+				"event":      "retry_attempts",
+				"provider":   rp.name,
+				"attempts":   attempts,
+				"timestamp":  time.Now().UTC().Format(time.RFC3339),
+			}
+			logJSON, _ := json.Marshal(logEvent)
+			log.Printf("%s", logJSON)
 		}
 
 		return err
