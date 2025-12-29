@@ -16,6 +16,7 @@ type Config struct {
 	Providers map[string]*ProviderConfig `yaml:"providers"`
 	Storage   StorageConfig              `yaml:"storage"`
 	Subagents SubagentsConfig            `yaml:"subagents"`
+	Routing   RoutingConfig              `yaml:"routing"`
 }
 
 type ServerConfig struct {
@@ -64,6 +65,31 @@ type SubagentsConfig struct {
 	Mappings map[string]string `yaml:"mappings"` // agentName -> "provider:model"
 }
 
+// RoutingConfig holds preference-based routing configuration
+type RoutingConfig struct {
+	Preferences      PreferencesConfig                 `yaml:"preferences"`
+	Tasks            map[string]TaskRoutingConfig      `yaml:"tasks"`
+	ProviderProfiles map[string]ProviderProfileConfig  `yaml:"provider_profiles"`
+}
+
+// PreferencesConfig holds default routing preferences
+type PreferencesConfig struct {
+	Default string `yaml:"default"` // cost, speed, quality, balanced
+}
+
+// TaskRoutingConfig defines routing for a specific task type
+type TaskRoutingConfig struct {
+	Preference string   `yaml:"preference"` // cost, speed, quality, balanced
+	Providers  []string `yaml:"providers"`  // Preferred providers for this task
+}
+
+// ProviderProfileConfig describes provider characteristics
+type ProviderProfileConfig struct {
+	Speed   int `yaml:"speed"`   // 1-10 scale
+	Cost    int `yaml:"cost"`    // 1-10 scale
+	Quality int `yaml:"quality"` // 1-10 scale
+}
+
 func Load() (*Config, error) {
 	// Load .env file if it exists
 	// Look for .env file in the project root (one level up from proxy/)
@@ -98,6 +124,13 @@ func Load() (*Config, error) {
 		Subagents: SubagentsConfig{
 			Enable:   false,
 			Mappings: make(map[string]string),
+		},
+		Routing: RoutingConfig{
+			Preferences: PreferencesConfig{
+				Default: "balanced",
+			},
+			Tasks:            make(map[string]TaskRoutingConfig),
+			ProviderProfiles: make(map[string]ProviderProfileConfig),
 		},
 	}
 
@@ -205,6 +238,11 @@ func Load() (*Config, error) {
 		if provider.FallbackProvider != "" && !provider.CircuitBreaker.Enabled {
 			provider.CircuitBreaker.Enabled = true
 		}
+	}
+
+	// Apply routing defaults
+	if cfg.Routing.Preferences.Default == "" {
+		cfg.Routing.Preferences.Default = "balanced"
 	}
 
 	// Validate provider configurations
