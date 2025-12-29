@@ -57,3 +57,38 @@ llm_providers:
         description: Generating new code, writing functions
       - name: code_review
         description: Analyzing code for bugs and improvements
+
+# Guardrails Configuration (Phase 4.2)
+# Built-in safety features for jailbreak detection, content moderation, and PII protection
+guardrails:
+  enabled: true
+
+  # Jailbreak detection - Detect attempts to bypass model safety
+  jailbreak_detection:
+    enabled: true
+    action: block  # Options: block, warn, log
+    sensitivity: medium  # Options: low, medium, high
+
+  # Content moderation - Filter harmful content
+  content_moderation:
+    enabled: true
+    action: warn  # Options: block, warn, log
+    categories:
+      - violence
+      - hate_speech
+      - sexual_content
+
+  # PII detection - Identify and optionally redact sensitive information
+  pii_detection:
+    enabled: true
+    action: log  # Options: block, warn, log
+    redact: false  # Whether to redact PII from logs
+    types:
+      - email
+      - phone
+      - ssn
+      - credit_card
+
+# Optional: OpenTelemetry tracing for observability
+tracing:
+  random_sampling: 100  # 100% sampling for development

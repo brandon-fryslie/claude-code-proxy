@@ -24,43 +24,55 @@ type CriteriaScore struct {
 	Feedback string `json:"feedback"`
 }
 
+// GuardrailEvent represents a guardrail trigger from Plano
+type GuardrailEvent struct {
+	Type        string `json:"type"`        // jailbreak_detection, content_moderation, pii_detection
+	Action      string `json:"action"`      // block, warn, log
+	Category    string `json:"category"`    // specific category (e.g., violence, hate_speech)
+	Reason      string `json:"reason"`      // why the guardrail triggered
+	Severity    string `json:"severity"`    // low, medium, high
+	TriggeredAt string `json:"triggeredAt"` // timestamp
+}
+
 type RequestLog struct {
-	RequestID     string              `json:"requestId"`
-	Timestamp     string              `json:"timestamp"`
-	Method        string              `json:"method"`
-	Endpoint      string              `json:"endpoint"`
-	Headers       map[string][]string `json:"headers"`
-	Body          interface{}         `json:"body"`
-	Model         string              `json:"model,omitempty"`
-	OriginalModel string              `json:"originalModel,omitempty"`
-	RoutedModel   string              `json:"routedModel,omitempty"`
-	Provider      string              `json:"provider,omitempty"`      // Which provider handled this request
-	SubagentName  string              `json:"subagentName,omitempty"`  // Matched subagent definition name
-	ToolsUsed     []string            `json:"toolsUsed,omitempty"`     // List of tool names from request
-	ToolCallCount int                 `json:"toolCallCount,omitempty"` // Number of tool calls in response
-	UserAgent     string              `json:"userAgent"`
-	ContentType   string              `json:"contentType"`
-	PromptGrade   *PromptGrade        `json:"promptGrade,omitempty"`
-	Response      *ResponseLog        `json:"response,omitempty"`
+	RequestID       string              `json:"requestId"`
+	Timestamp       string              `json:"timestamp"`
+	Method          string              `json:"method"`
+	Endpoint        string              `json:"endpoint"`
+	Headers         map[string][]string `json:"headers"`
+	Body            interface{}         `json:"body"`
+	Model           string              `json:"model,omitempty"`
+	OriginalModel   string              `json:"originalModel,omitempty"`
+	RoutedModel     string              `json:"routedModel,omitempty"`
+	Provider        string              `json:"provider,omitempty"`      // Which provider handled this request
+	SubagentName    string              `json:"subagentName,omitempty"`  // Matched subagent definition name
+	ToolsUsed       []string            `json:"toolsUsed,omitempty"`     // List of tool names from request
+	ToolCallCount   int                 `json:"toolCallCount,omitempty"` // Number of tool calls in response
+	UserAgent       string              `json:"userAgent"`
+	ContentType     string              `json:"contentType"`
+	PromptGrade     *PromptGrade        `json:"promptGrade,omitempty"`
+	Response        *ResponseLog        `json:"response,omitempty"`
+	GuardrailEvents []GuardrailEvent    `json:"guardrailEvents,omitempty"` // Guardrails triggered
 }
 
 // RequestSummary is a lightweight version of RequestLog for list views
 type RequestSummary struct {
-	RequestID     string          `json:"requestId"`
-	Timestamp     string          `json:"timestamp"`
-	Method        string          `json:"method"`
-	Endpoint      string          `json:"endpoint"`
-	Model         string          `json:"model,omitempty"`
-	OriginalModel string          `json:"originalModel,omitempty"`
-	RoutedModel   string          `json:"routedModel,omitempty"`
-	Provider      string          `json:"provider,omitempty"`
-	SubagentName  string          `json:"subagentName,omitempty"`
-	ToolsUsed     []string        `json:"toolsUsed,omitempty"`
-	ToolCallCount int             `json:"toolCallCount,omitempty"`
-	StatusCode    int             `json:"statusCode,omitempty"`
-	ResponseTime  int64           `json:"responseTime,omitempty"`
-	FirstByteTime int64           `json:"firstByteTime,omitempty"` // Time to first token (streaming)
-	Usage         *AnthropicUsage `json:"usage,omitempty"`
+	RequestID        string          `json:"requestId"`
+	Timestamp        string          `json:"timestamp"`
+	Method           string          `json:"method"`
+	Endpoint         string          `json:"endpoint"`
+	Model            string          `json:"model,omitempty"`
+	OriginalModel    string          `json:"originalModel,omitempty"`
+	RoutedModel      string          `json:"routedModel,omitempty"`
+	Provider         string          `json:"provider,omitempty"`
+	SubagentName     string          `json:"subagentName,omitempty"`
+	ToolsUsed        []string        `json:"toolsUsed,omitempty"`
+	ToolCallCount    int             `json:"toolCallCount,omitempty"`
+	StatusCode       int             `json:"statusCode,omitempty"`
+	ResponseTime     int64           `json:"responseTime,omitempty"`
+	FirstByteTime    int64           `json:"firstByteTime,omitempty"` // Time to first token (streaming)
+	Usage            *AnthropicUsage `json:"usage,omitempty"`
+	GuardrailBlocked bool            `json:"guardrailBlocked,omitempty"` // Whether request was blocked by guardrails
 }
 
 type ResponseLog struct {
@@ -352,4 +364,33 @@ type ConversationMatch struct {
 	ProjectPath    string    `json:"projectPath"`
 	MatchCount     int       `json:"matchCount"`
 	LastActivity   time.Time `json:"lastActivity"`
+}
+
+// Guardrail analytics (Phase 4.2)
+type GuardrailStats struct {
+	Type       string `json:"type"`       // jailbreak_detection, content_moderation, pii_detection
+	BlockCount int    `json:"blockCount"` // Number of blocked requests
+	WarnCount  int    `json:"warnCount"`  // Number of warnings issued
+	LogCount   int    `json:"logCount"`   // Number of logged events
+	TotalCount int    `json:"totalCount"` // Total guardrail triggers
+}
+
+type GuardrailStatsResponse struct {
+	Guardrails []GuardrailStats `json:"guardrails"`
+	StartTime  string           `json:"startTime"`
+	EndTime    string           `json:"endTime"`
+}
+
+// GuardrailEventLog represents a logged guardrail event for the dashboard
+type GuardrailEventLog struct {
+	RequestID   string `json:"requestId"`
+	Timestamp   string `json:"timestamp"`
+	Type        string `json:"type"`
+	Action      string `json:"action"`
+	Category    string `json:"category"`
+	Reason      string `json:"reason"`
+	Severity    string `json:"severity"`
+	Provider    string `json:"provider"`
+	Model       string `json:"model"`
+	SubagentName string `json:"subagentName,omitempty"`
 }
