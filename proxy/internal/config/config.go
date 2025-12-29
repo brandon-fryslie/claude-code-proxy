@@ -35,11 +35,23 @@ type TimeoutsConfig struct {
 
 // ProviderConfig is the unified configuration for all providers
 type ProviderConfig struct {
-	Format     string `yaml:"format"`     // Required: "anthropic" or "openai"
-	BaseURL    string `yaml:"base_url"`   // Required: API base URL
-	APIKey     string `yaml:"api_key"`    // Optional: API key (required for some providers)
-	Version    string `yaml:"version"`    // Optional: API version (for Anthropic-format providers)
-	MaxRetries int    `yaml:"max_retries"` // Optional: Max retry attempts
+	Format           string `yaml:"format"`            // Required: "anthropic" or "openai"
+	BaseURL          string `yaml:"base_url"`          // Required: API base URL
+	APIKey           string `yaml:"api_key"`           // Optional: API key (required for some providers)
+	Version          string `yaml:"version"`           // Optional: API version (for Anthropic-format providers)
+	MaxRetries       int    `yaml:"max_retries"`       // Optional: Max retry attempts (default: 3)
+	FallbackProvider string `yaml:"fallback_provider"` // Optional: Provider to use when this one fails
+	CircuitBreaker   CircuitBreakerConfig `yaml:"circuit_breaker"` // Optional: Circuit breaker settings
+}
+
+// CircuitBreakerConfig holds circuit breaker configuration
+type CircuitBreakerConfig struct {
+	Enabled     bool   `yaml:"enabled"`      // Optional: Enable circuit breaker (default: true for providers with fallback)
+	MaxFailures int    `yaml:"max_failures"` // Optional: Failures before opening circuit (default: 5)
+	Timeout     string `yaml:"timeout"`      // Optional: Time before retry in half-open state (default: 30s)
+
+	// Parsed timeout duration (not in YAML)
+	TimeoutDuration time.Duration `yaml:"-"`
 }
 
 type StorageConfig struct {
@@ -165,6 +177,36 @@ func Load() (*Config, error) {
 		}
 	}
 
+	// Parse circuit breaker timeout durations and apply defaults
+	for name, provider := range cfg.Providers {
+		// Apply circuit breaker defaults
+		if provider.MaxRetries == 0 {
+			provider.MaxRetries = 3
+		}
+
+		// Parse circuit breaker timeout
+		if provider.CircuitBreaker.Timeout != "" {
+			if duration, err := time.ParseDuration(provider.CircuitBreaker.Timeout); err == nil {
+				provider.CircuitBreaker.TimeoutDuration = duration
+			} else {
+				return nil, fmt.Errorf("provider '%s': invalid circuit_breaker.timeout '%s': %w", name, provider.CircuitBreaker.Timeout, err)
+			}
+		} else {
+			// Default timeout: 30s
+			provider.CircuitBreaker.TimeoutDuration = 30 * time.Second
+		}
+
+		// Default max failures: 5
+		if provider.CircuitBreaker.MaxFailures == 0 {
+			provider.CircuitBreaker.MaxFailures = 5
+		}
+
+		// Enable circuit breaker by default if fallback is configured
+		if provider.FallbackProvider != "" && !provider.CircuitBreaker.Enabled {
+			provider.CircuitBreaker.Enabled = true
+		}
+	}
+
 	// Validate provider configurations
 	if err := cfg.validateProviders(); err != nil {
 		return nil, err
@@ -184,7 +226,39 @@ func (c *Config) validateProviders() error {
 		if provider.BaseURL == "" {
 			return fmt.Errorf("provider '%s' is missing required 'base_url' field", name)
 		}
+
+		// Validate fallback provider exists
+		if provider.FallbackProvider != "" {
+			if _, exists := c.Providers[provider.FallbackProvider]; !exists {
+				return fmt.Errorf("provider '%s' has invalid fallback_provider '%s' (provider does not exist)", name, provider.FallbackProvider)
+			}
+
+			// Prevent circular fallback
+			if provider.FallbackProvider == name {
+				return fmt.Errorf("provider '%s' cannot have itself as fallback_provider", name)
+			}
+
+			// Check for fallback chains (A -> B -> A)
+			if err := c.checkFallbackChain(name, provider.FallbackProvider, make(map[string]bool)); err != nil {
+				return err
+			}
+		}
 	}
+	return nil
+}
+
+// checkFallbackChain detects circular fallback chains
+func (c *Config) checkFallbackChain(original string, current string, visited map[string]bool) error {
+	if visited[current] {
+		return fmt.Errorf("circular fallback chain detected involving provider '%s'", original)
+	}
+
+	visited[current] = true
+
+	if provider, exists := c.Providers[current]; exists && provider.FallbackProvider != "" {
+		return c.checkFallbackChain(original, provider.FallbackProvider, visited)
+	}
+
 	return nil
 }
 

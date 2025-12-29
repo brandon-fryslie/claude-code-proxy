@@ -175,20 +175,15 @@ func (h *CoreHandler) Health(w http.ResponseWriter, r *http.Request) {
 		dbStatus = "disconnected"
 	}
 
-	// List configured providers
-	var providers []string
-	if h.config != nil {
-		for name := range h.config.Providers {
-			providers = append(providers, name)
-		}
-	}
+	// Get provider health information including circuit breaker status
+	providerHealth := h.modelRouter.GetProviderHealth()
 
 	response := map[string]interface{}{
-		"status":    "ok",
-		"service":   "proxy-core",
-		"database":  dbStatus,
-		"providers": providers,
-		"timestamp": time.Now(),
+		"status":          "ok",
+		"service":         "proxy-core",
+		"database":        dbStatus,
+		"provider_health": providerHealth,
+		"timestamp":       time.Now(),
 	}
 
 	writeJSONResponse(w, response)

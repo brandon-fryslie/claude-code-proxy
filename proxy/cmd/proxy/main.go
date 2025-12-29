@@ -28,20 +28,21 @@ func main() {
 	}
 
 	// Initialize providers dynamically based on format
-	providers := make(map[string]provider.Provider)
+	// First pass: create all base providers
+	baseProviders := make(map[string]provider.Provider)
 	for name, providerCfg := range cfg.Providers {
 		switch providerCfg.Format {
 		case "anthropic":
-			providers[name] = provider.NewAnthropicProvider(name, providerCfg)
+			baseProviders[name] = provider.NewAnthropicProvider(name, providerCfg)
 			logger.Printf("📡 Initialized Anthropic-format provider: %s (%s)", name, providerCfg.BaseURL)
 		case "openai":
 			// For Plano provider, use PlanoProvider for better logging and future extensibility
 			// Otherwise use OpenAIProvider for standard OpenAI API
 			if name == "plano" {
-				providers[name] = provider.NewPlanoProvider(name, providerCfg)
+				baseProviders[name] = provider.NewPlanoProvider(name, providerCfg)
 				logger.Printf("📡 Initialized Plano (multi-LLM) provider: %s (%s)", name, providerCfg.BaseURL)
 			} else {
-				providers[name] = provider.NewOpenAIProvider(name, providerCfg)
+				baseProviders[name] = provider.NewOpenAIProvider(name, providerCfg)
 				logger.Printf("📡 Initialized OpenAI-format provider: %s (%s)", name, providerCfg.BaseURL)
 			}
 		default:
@@ -49,8 +50,37 @@ func main() {
 		}
 	}
 
-	if len(providers) == 0 {
+	if len(baseProviders) == 0 {
 		logger.Fatalf("❌ No providers configured. Please configure at least one provider in config.yaml")
+	}
+
+	// Second pass: wrap providers with resilience features (circuit breaker, retry, fallback)
+	providers := make(map[string]provider.Provider)
+	for name, baseProvider := range baseProviders {
+		providerCfg := cfg.Providers[name]
+
+		// Check if this provider has a fallback configured
+		var fallbackProvider provider.Provider
+		if providerCfg.FallbackProvider != "" {
+			if fb, exists := baseProviders[providerCfg.FallbackProvider]; exists {
+				fallbackProvider = fb
+				logger.Printf("🔄 Provider '%s' configured with fallback to '%s'", name, providerCfg.FallbackProvider)
+			} else {
+				logger.Printf("⚠️  Provider '%s' has invalid fallback_provider '%s' (not found)", name, providerCfg.FallbackProvider)
+			}
+		}
+
+		// Wrap with resilient provider if circuit breaker enabled or fallback configured
+		if providerCfg.CircuitBreaker.Enabled || fallbackProvider != nil {
+			providers[name] = provider.NewResilientProvider(name, baseProvider, fallbackProvider, providerCfg)
+			if providerCfg.CircuitBreaker.Enabled {
+				logger.Printf("🛡️  Circuit breaker enabled for '%s' (max_failures: %d, timeout: %s)",
+					name, providerCfg.CircuitBreaker.MaxFailures, providerCfg.CircuitBreaker.TimeoutDuration)
+			}
+		} else {
+			// No resilience features needed, use base provider directly
+			providers[name] = baseProvider
+		}
 	}
 
 	// Initialize model router

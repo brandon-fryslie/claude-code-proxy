@@ -43,6 +43,14 @@ type SubagentDefinition struct {
 	FullPrompt     string // Store for debugging
 }
 
+// ProviderHealth contains health information for a provider
+type ProviderHealth struct {
+	Name              string  `json:"name"`
+	CircuitBreakerState string `json:"circuit_breaker_state,omitempty"`
+	FallbackProvider  string  `json:"fallback_provider,omitempty"`
+	Healthy           bool    `json:"healthy"`
+}
+
 func NewModelRouter(cfg *config.Config, providers map[string]provider.Provider, logger *log.Logger) *ModelRouter {
 	// Parse subagent mappings from "provider:model" format
 	parsedMappings := make(map[string]SubagentMapping)
@@ -289,4 +297,35 @@ func (r *ModelRouter) getDefaultProviderForModel(model string) string {
 	}
 
 	return ""
+}
+
+// GetProviderHealth returns health information for all providers
+func (r *ModelRouter) GetProviderHealth() []ProviderHealth {
+	var health []ProviderHealth
+
+	for name, prov := range r.providers {
+		providerHealth := ProviderHealth{
+			Name:    name,
+			Healthy: true, // Default to healthy unless circuit breaker is open
+		}
+
+		// Check if this is a ResilientProvider with circuit breaker
+		if resilient, ok := prov.(*provider.ResilientProvider); ok {
+			if state := resilient.GetCircuitBreakerState(); state != nil {
+				providerHealth.CircuitBreakerState = state.String()
+				if *state == provider.StateOpen {
+					providerHealth.Healthy = false
+				}
+			}
+
+			// Add fallback provider info if configured
+			if cfg, exists := r.config.Providers[name]; exists && cfg.FallbackProvider != "" {
+				providerHealth.FallbackProvider = cfg.FallbackProvider
+			}
+		}
+
+		health = append(health, providerHealth)
+	}
+
+	return health
 }
