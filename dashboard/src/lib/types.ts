@@ -335,3 +335,63 @@ export interface Config {
   storage: StorageConfig
   subagents: SubagentsConfig
 }
+
+// ============================================================================
+// Routing Configuration Types (Phase 4.1)
+// ============================================================================
+
+/**
+ * Circuit breaker configuration - matches proxy/internal/config/config.go CircuitBreakerConfig
+ */
+export interface CircuitBreakerConfig {
+  enabled: boolean
+  max_failures: number
+  timeout: string
+}
+
+/**
+ * Extended provider configuration including circuit breaker and fallback settings
+ * Matches the response from GET /api/v2/routing/config
+ */
+export interface RoutingProviderConfig {
+  format: 'anthropic' | 'openai'
+  base_url: string
+  max_retries: number
+  fallback_provider?: string
+  circuit_breaker: CircuitBreakerConfig
+}
+
+/**
+ * Full routing configuration response
+ * Matches the response from GET /api/v2/routing/config
+ */
+export interface RoutingConfig {
+  providers: Record<string, RoutingProviderConfig>
+  subagents: {
+    enable: boolean
+    mappings: Record<string, string>
+  }
+}
+
+/**
+ * Provider health status - matches proxy/internal/service/model_router.go ProviderHealth
+ */
+export interface ProviderHealth {
+  name: string
+  healthy: boolean
+  circuit_breaker_state?: 'closed' | 'open' | 'half-open'
+  fallback_provider?: string
+}
+
+/**
+ * Routing statistics response
+ * Matches the response from GET /api/v2/routing/stats
+ */
+export interface RoutingStatsResponse {
+  providers: ProviderStatsResponse
+  subagents: SubagentStatsResponse
+  timeRange: {
+    start: string
+    end: string
+  }
+}

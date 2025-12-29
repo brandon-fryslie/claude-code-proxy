@@ -1,14 +1,71 @@
 import { PageHeader, PageContent } from '@/components/layout'
-import { GitBranch, ArrowRight, Server, Settings, Check, X } from 'lucide-react'
+import { GitBranch, ArrowRight, Server, Settings, Check, X, AlertCircle, Activity } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   useSubagentStats,
-  useProviders,
-  useSubagentConfig,
+  useRoutingConfig,
+  useProviderHealth,
   formatTokens,
   formatDuration,
 } from '@/lib/api'
 import { useDateRange } from '@/lib/DateRangeContext'
+import type { ProviderHealth } from '@/lib/types'
+
+function ProviderHealthCard({ provider }: { provider: ProviderHealth }) {
+  const getStatusIcon = () => {
+    if (!provider.healthy) {
+      return <X className="w-5 h-5 text-red-500" />
+    }
+    if (provider.circuit_breaker_state === 'half-open') {
+      return <AlertCircle className="w-5 h-5 text-yellow-500" />
+    }
+    return <Check className="w-5 h-5 text-green-500" />
+  }
+
+  const getCircuitBreakerBadge = () => {
+    if (!provider.circuit_breaker_state) return null
+
+    const colors = {
+      closed: 'bg-green-500/10 text-green-400',
+      'half-open': 'bg-yellow-500/10 text-yellow-400',
+      open: 'bg-red-500/10 text-red-400',
+    }
+
+    return (
+      <span className={cn('px-2 py-1 rounded text-xs font-medium', colors[provider.circuit_breaker_state])}>
+        Circuit: {provider.circuit_breaker_state}
+      </span>
+    )
+  }
+
+  return (
+    <div className="flex items-start gap-4 p-4 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]">
+      <div className="flex-shrink-0 mt-0.5">{getStatusIcon()}</div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-2">
+          <h3 className="font-medium text-[var(--color-text-primary)]">{provider.name}</h3>
+          {getCircuitBreakerBadge()}
+        </div>
+
+        <div className="space-y-1 text-sm text-[var(--color-text-secondary)]">
+          <div className="flex items-center gap-2">
+            <span className="text-[var(--color-text-muted)]">Status:</span>
+            <span className={provider.healthy ? 'text-green-400' : 'text-red-400'}>
+              {provider.healthy ? 'Healthy' : 'Unhealthy'}
+            </span>
+          </div>
+
+          {provider.fallback_provider && (
+            <div className="flex items-center gap-2">
+              <span className="text-[var(--color-text-muted)]">Fallback:</span>
+              <span className="font-mono text-xs">{provider.fallback_provider}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function RouteRow({
   subagent,
@@ -60,8 +117,8 @@ function RouteRow({
 export function RoutingPage() {
   const { dateRange } = useDateRange()
   const { data: subagentStats, isLoading: statsLoading } = useSubagentStats(dateRange)
-  const { data: providers, isLoading: providersLoading } = useProviders()
-  const { data: subagentConfig, isLoading: configLoading } = useSubagentConfig()
+  const { data: routingConfig, isLoading: configLoading } = useRoutingConfig()
+  const { data: providerHealth, isLoading: healthLoading } = useProviderHealth()
 
   const totalRouted = subagentStats?.subagents?.reduce((acc, s) => acc + s.requests, 0) || 0
   const totalTokens = subagentStats?.subagents?.reduce((acc, s) => acc + s.totalTokens, 0) || 0
@@ -77,22 +134,53 @@ export function RoutingPage() {
     <>
       <PageHeader
         title="Provider Routing"
-        description="Configure and monitor subagent routing"
+        description="Monitor provider health, circuit breakers, and subagent routing"
       />
       <PageContent>
-        <div className="max-w-3xl space-y-6">
-          {/* Providers Section */}
+        <div className="max-w-5xl space-y-8">
+          {/* Provider Health Section */}
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <Activity size={16} className="text-[var(--color-text-muted)]" />
+              <h2 className="text-sm font-medium text-[var(--color-text-primary)]">
+                Provider Health
+              </h2>
+            </div>
+
+            {healthLoading ? (
+              <div className="flex items-center justify-center h-32 text-[var(--color-text-muted)]">
+                Loading provider health...
+              </div>
+            ) : !providerHealth || providerHealth.length === 0 ? (
+              <div className="flex items-center justify-center h-32 text-[var(--color-text-muted)]">
+                <div className="text-center">
+                  <p>No provider health information available</p>
+                  <p className="text-sm mt-1">Configure providers in config.yaml</p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {providerHealth.map((provider) => (
+                  <ProviderHealthCard key={provider.name} provider={provider} />
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Providers Configuration Section */}
           <div>
             <div className="flex items-center gap-2 mb-4">
               <Server size={16} className="text-[var(--color-text-muted)]" />
-              <h2 className="text-sm font-medium text-[var(--color-text-primary)]">Providers</h2>
+              <h2 className="text-sm font-medium text-[var(--color-text-primary)]">
+                Provider Configuration
+              </h2>
             </div>
 
-            {providersLoading ? (
+            {configLoading ? (
               <div className="flex items-center justify-center h-32 text-[var(--color-text-muted)]">
-                Loading providers...
+                Loading configuration...
               </div>
-            ) : !providers || Object.keys(providers).length === 0 ? (
+            ) : !routingConfig || Object.keys(routingConfig.providers).length === 0 ? (
               <div className="flex items-center justify-center h-32 text-[var(--color-text-muted)]">
                 <div className="text-center">
                   <p>No providers configured</p>
@@ -101,14 +189,14 @@ export function RoutingPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {Object.entries(providers).map(([name, config]) => (
+                {Object.entries(routingConfig.providers).map(([name, config]) => (
                   <div
                     key={name}
-                    className="flex items-center gap-4 p-3 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]"
+                    className="flex items-start gap-4 p-3 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)]"
                   >
-                    <Server size={16} className="text-[var(--color-text-muted)]" />
+                    <Server size={16} className="text-[var(--color-text-muted)] mt-0.5" />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 mb-1">
                         <span className="text-sm font-medium text-[var(--color-text-primary)]">
                           {name}
                         </span>
@@ -122,20 +210,26 @@ export function RoutingPage() {
                         >
                           {config.format}
                         </span>
-                      </div>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-[var(--color-text-secondary)]">
-                        <span>{config.base_url}</span>
-                        {config.api_key && (
-                          <span className="flex items-center gap-1">
-                            <Check size={12} className="text-[var(--color-success)]" />
-                            <span className="text-[var(--color-success)]">API Key</span>
+                        {config.circuit_breaker?.enabled && (
+                          <span className="text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-400">
+                            Circuit Breaker
                           </span>
                         )}
-                        {!config.api_key && (
-                          <span className="flex items-center gap-1">
-                            <X size={12} className="text-[var(--color-text-muted)]" />
-                            <span className="text-[var(--color-text-muted)]">No API Key</span>
-                          </span>
+                      </div>
+                      <div className="space-y-1 text-xs text-[var(--color-text-secondary)]">
+                        <div>{config.base_url}</div>
+                        {config.fallback_provider && (
+                          <div className="flex items-center gap-1">
+                            <span className="text-[var(--color-text-muted)]">Fallback:</span>
+                            <span>{config.fallback_provider}</span>
+                          </div>
+                        )}
+                        {config.circuit_breaker?.enabled && (
+                          <div className="flex items-center gap-2 text-[var(--color-text-muted)]">
+                            <span>Max failures: {config.circuit_breaker.max_failures}</span>
+                            <span>•</span>
+                            <span>Timeout: {config.circuit_breaker.timeout}</span>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -166,29 +260,29 @@ export function RoutingPage() {
                   <span
                     className={cn(
                       'text-xs px-2 py-1 rounded font-medium',
-                      subagentConfig?.enable
+                      routingConfig?.subagents?.enable
                         ? 'bg-[var(--color-success)]/10 text-[var(--color-success)]'
                         : 'bg-[var(--color-text-muted)]/10 text-[var(--color-text-muted)]'
                     )}
                   >
-                    {subagentConfig?.enable ? 'Enabled' : 'Disabled'}
+                    {routingConfig?.subagents?.enable ? 'Enabled' : 'Disabled'}
                   </span>
                 </div>
 
                 {/* Mappings */}
-                {!subagentConfig?.enable ? (
+                {!routingConfig?.subagents?.enable ? (
                   <div className="p-4 rounded-lg bg-[var(--color-bg-tertiary)] border border-[var(--color-border)] text-sm text-[var(--color-text-muted)]">
                     Subagent routing is disabled. Enable it in config.yaml to route subagents to
                     different providers.
                   </div>
-                ) : !subagentConfig?.mappings ||
-                  Object.keys(subagentConfig.mappings).length === 0 ? (
+                ) : !routingConfig?.subagents?.mappings ||
+                  Object.keys(routingConfig.subagents.mappings).length === 0 ? (
                   <div className="p-4 rounded-lg bg-[var(--color-bg-tertiary)] border border-[var(--color-border)] text-sm text-[var(--color-text-muted)]">
                     No subagent mappings configured. Add mappings in config.yaml.
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {Object.entries(subagentConfig.mappings).map(([agentName, mapping]) => {
+                    {Object.entries(routingConfig.subagents.mappings).map(([agentName, mapping]) => {
                       const [provider, model] = mapping.split(':')
                       return (
                         <div

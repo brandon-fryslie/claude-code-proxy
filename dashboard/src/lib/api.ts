@@ -14,6 +14,9 @@ import type {
   Config,
   ProviderConfig,
   SubagentsConfig,
+  RoutingConfig,
+  ProviderHealth,
+  RoutingStatsResponse,
 } from './types'
 
 // Use V2 API for cleaner responses
@@ -228,6 +231,48 @@ export function useSubagentConfig() {
     queryKey: ['config', 'subagents'],
     queryFn: () => fetchAPI<SubagentsConfig>('/config/subagents'),
     staleTime: 60000,
+  })
+}
+
+// ============================================================================
+// Routing Configuration Queries (Phase 4.1)
+// ============================================================================
+
+/**
+ * Fetches the full routing configuration including circuit breaker and fallback settings
+ * GET /api/v2/routing/config
+ */
+export function useRoutingConfig() {
+  return useQuery({
+    queryKey: ['routing', 'config'],
+    queryFn: () => fetchAPI<RoutingConfig>('/routing/config'),
+    staleTime: 30000, // Routing config changes less often - cache for 30 seconds
+  })
+}
+
+/**
+ * Fetches real-time provider health status including circuit breaker state
+ * GET /api/v2/routing/providers
+ */
+export function useProviderHealth() {
+  return useQuery({
+    queryKey: ['routing', 'providers'],
+    queryFn: () => fetchAPI<ProviderHealth[]>('/routing/providers'),
+    staleTime: 5000, // Refresh health status more frequently - cache for 5 seconds
+    refetchInterval: 10000, // Auto-refresh every 10 seconds
+  })
+}
+
+/**
+ * Fetches routing statistics including provider usage and circuit breaker trips
+ * GET /api/v2/routing/stats
+ */
+export function useRoutingStats(params?: StatsParams) {
+  const queryString = buildQueryString(params || {})
+  return useQuery({
+    queryKey: ['routing', 'stats', params],
+    queryFn: () => fetchAPI<RoutingStatsResponse>(`/routing/stats${queryString}`),
+    staleTime: 10000, // Cache for 10 seconds
   })
 }
 
