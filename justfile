@@ -43,6 +43,18 @@ stop:
 restart-data:
     docker-compose -f docker-compose.backend.yml up -d --no-deps --build proxy-data
 
+# Start just Plano service
+plano-up:
+    docker-compose -f docker-compose.backend.yml up -d plano
+
+# View Plano logs
+plano-logs:
+    docker-compose -f docker-compose.backend.yml logs -f plano
+
+# Restart Plano service
+plano-restart:
+    docker-compose -f docker-compose.backend.yml restart plano
+
 # Run all tests
 test:
     cd proxy && go test -tags "fts5" ./...
