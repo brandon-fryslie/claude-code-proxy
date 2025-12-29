@@ -165,6 +165,11 @@ func main() {
 	r.HandleFunc("/api/v2/config/providers", h.GetProvidersV2).Methods("GET")
 	r.HandleFunc("/api/v2/config/subagents", h.GetSubagentConfigV2).Methods("GET")
 
+	// V2 Routing API (Phase 4.1)
+	r.HandleFunc("/api/v2/routing/config", h.GetRoutingConfigV2).Methods("GET")
+	r.HandleFunc("/api/v2/routing/providers", h.GetProviderStatusV2).Methods("GET")
+	r.HandleFunc("/api/v2/routing/stats", h.GetRoutingStatsV2).Methods("GET")
+
 	r.NotFoundHandler = http.HandlerFunc(h.NotFound)
 
 	srv := &http.Server{

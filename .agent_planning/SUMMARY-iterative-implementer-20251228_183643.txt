@@ -1,0 +1,127 @@
+Agent: iterative-implementer | 20251228_183643
+Mode: manual
+Completed: Prometheus metrics, /metrics endpoint, resilient provider instrumentation, structured logging, tests | Files: 4 | Commits: 0
+Tests: 6 passing (metrics package)
+Cache invalidated: None (no eval cache existed for this feature)
+Status: complete
+
+=== Implementation Summary ===
+
+Phase 2.2: Monitoring & Observability for Plano Integration - COMPLETE
+
+All tasks completed successfully:
+
+1. Created Prometheus Metrics Package (proxy/internal/metrics/metrics.go)
+   - proxy_requests_total - Counter by provider, model, status
+   - proxy_request_duration_seconds - Histogram by provider
+   - proxy_circuit_breaker_state - Gauge (0=closed, 1=open, 2=half-open)
+   - proxy_fallback_total - Counter by from/to provider
+   - proxy_retry_total - Counter by provider
+   - proxy_circuit_breaker_state_changes_total - Counter by provider/from_state/to_state
+
+2. Added /metrics Endpoint
+   - Updated cmd/proxy/main.go to expose Prometheus metrics via HTTP handler
+   - Endpoint available at GET /metrics
+   - Standard Prometheus text exposition format
+
+3. Instrumented Resilient Provider
+   - Updated resilient_provider.go to record request metrics (duration, status)
+   - Added fallback activation tracking
+   - Added retry attempt tracking
+   - Set up circuit breaker state change callbacks
+
+4. Implemented Structured Logging
+   - JSON-formatted log events for circuit breaker state changes
+   - JSON-formatted log events for fallback activations
+   - JSON-formatted log events for retry attempts
+   - All events include timestamp in UTC RFC3339 format
+
+5. Enhanced Circuit Breaker
+   - Added StateChangeCallback mechanism
+   - Circuit breaker now emits state change events
+   - State changes update metrics and emit structured logs
+   - Thread-safe callback invocation (avoids deadlocks)
+
+6. Comprehensive Tests
+   - Created metrics_test.go with 6 test cases
+   - TestRecordRequest - Verifies request counter increments
+   - TestUpdateCircuitBreakerState - Verifies circuit breaker state gauge updates
+   - TestRecordFallback - Verifies fallback counter increments
+   - TestRecordRetry - Verifies retry counter increments
+   - TestRecordCircuitBreakerStateChange - Verifies state change counter
+   - TestMultipleProviders - Verifies label-based metric separation
+   - All tests passing
+
+=== Files Modified ===
+
+Created:
+- proxy/internal/metrics/metrics.go (89 lines)
+- proxy/internal/metrics/metrics_test.go (153 lines)
+
+Modified:
+- proxy/internal/provider/circuit_breaker.go (+42 lines - added callback support)
+- proxy/internal/provider/resilient_provider.go (+72 lines - metrics instrumentation)
+- proxy/cmd/proxy/main.go (+2 lines - /metrics endpoint)
+- proxy/go.mod (added prometheus dependencies)
+- proxy/go.sum (updated with prometheus packages)
+
+=== Metrics Available ===
+
+Counters:
+- proxy_requests_total{provider, model, status}
+- proxy_fallback_total{from_provider, to_provider}
+- proxy_retry_total{provider}
+- proxy_circuit_breaker_state_changes_total{provider, from_state, to_state}
+
+Gauges:
+- proxy_circuit_breaker_state{provider}
+
+Histograms:
+- proxy_request_duration_seconds{provider}
+
+=== Testing Results ===
+
+proxy/internal/metrics:
+- TestRecordRequest: PASS
+- TestUpdateCircuitBreakerState: PASS
+- TestRecordFallback: PASS
+- TestRecordRetry: PASS
+- TestRecordCircuitBreakerStateChange: PASS
+- TestMultipleProviders: PASS
+
+All existing tests still pass (handler, provider, circuit_breaker, retry tests).
+
+Build: SUCCESS (go build ./cmd/proxy/)
+
+=== Example Usage ===
+
+1. Access metrics endpoint:
+   curl http://localhost:3001/metrics
+
+2. Metrics output example:
+   # HELP proxy_requests_total Total number of requests processed by the proxy
+   # TYPE proxy_requests_total counter
+   proxy_requests_total{provider="plano",model="gemini/gemini-2.0-flash-exp",status="success"} 42
+
+   # HELP proxy_circuit_breaker_state Circuit breaker state (0=closed, 1=open, 2=half-open)
+   # TYPE proxy_circuit_breaker_state gauge
+   proxy_circuit_breaker_state{provider="plano"} 0
+
+   # HELP proxy_fallback_total Total number of fallback activations
+   # TYPE proxy_fallback_total counter
+   proxy_fallback_total{from_provider="plano",to_provider="openai"} 3
+
+3. Structured log events:
+   {"event":"circuit_breaker_state_change","provider":"plano","old_state":"closed","new_state":"open","timestamp":"2025-12-28T18:36:00Z"}
+   {"event":"fallback_activated","from_provider":"plano","to_provider":"openai","reason":"circuit breaker is open","timestamp":"2025-12-28T18:36:01Z"}
+   {"event":"retry_attempts","provider":"plano","attempts":3,"timestamp":"2025-12-28T18:36:02Z"}
+
+=== Next Steps ===
+
+Phase 2.2 is complete. Ready for Phase 2.3 or Phase 3 tasks.
+
+Suggested follow-up:
+- Add Grafana dashboard for visualizing metrics
+- Set up Prometheus scraping configuration
+- Add alerting rules for circuit breaker state changes
+- Extend dashboard UI to display real-time circuit breaker status
