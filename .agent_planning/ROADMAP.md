@@ -189,23 +189,7 @@
 
 ---
 
-## Phase 6: ArchGW Integration [QUEUED]
-
-**Goal:** Integrate ArchGW for unified provider routing
-
-### Topics
-
-- **integrate-archgw** [PROPOSED]
-  - Epic: `brandon-fryslie_claude-code-proxy-evg`
-  - Research ArchGW capabilities and architecture
-  - Evaluate integration approach with existing proxy
-  - Implement ArchGW as routing backend
-  - Migrate current provider routing to ArchGW
-  - Add ArchGW configuration to web dashboard
-
----
-
-## Phase 7: Testing & Polish [QUEUED]
+## Phase 6: Testing & Polish [QUEUED]
 
 **Goal:** Ensure reliability and production readiness
 

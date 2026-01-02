@@ -10,13 +10,12 @@ Claude Code Proxy serves three main purposes:
 
 1. **Claude Code Proxy**: Intercepts and monitors requests from Claude Code (claude.ai/code) to the Anthropic API, allowing you to see what Claude Code is doing in real-time
 2. **Conversation Viewer**: Displays and analyzes your Claude API conversations with a beautiful web interface
-3. **Agent Routing (Optional)**: Routes specific Claude Code agents to different LLM providers (e.g., route code-reviewer agent to GPT-4o, or planner agent to Gemini via Plano)
+3. **Agent Routing (Optional)**: Routes specific Claude Code agents to different LLM providers (e.g., route code-reviewer agent to GPT-4o or Z.ai)
 
 ## Features
 
 - **Transparent Proxy**: Routes Claude Code requests through the monitor without disruption
 - **Agent Routing (Optional)**: Map specific Claude Code agents to different LLM models
-- **Multi-LLM Support via Plano**: Access Gemini, DeepSeek, Qwen, and more providers through integrated Plano router
 - **Request Monitoring**: SQLite-based logging of all API interactions
 - **Live Dashboard**: Real-time visualization of requests and responses
 - **Conversation Analysis**: View full conversation threads with tool usage
@@ -39,14 +38,11 @@ Claude Code Proxy serves three main purposes:
    cp .env.example .env
    ```
 
-2. **Configure API keys** (if using Plano for multi-LLM routing)
+2. **Configure API keys** (if using subagent routing)
 
    Edit `.env` and add your provider API keys:
    ```bash
    OPENAI_API_KEY=sk-xxx
-   GEMINI_API_KEY=your-gemini-key
-   DEEPSEEK_API_KEY=sk-your-deepseek-key
-   DASHSCOPE_API_KEY=sk-your-qwen-key
    ```
 
 3. **Install dependencies**
@@ -94,9 +90,6 @@ just run           # Run in development mode (Caddy + services + dashboards)
 just docker        # Run with Docker (backend containers + local frontends for HMR)
 just stop          # Stop Docker services
 just restart-data  # Restart data service (zero-downtime update)
-just plano-up      # Start just Plano service
-just plano-logs    # View Plano logs
-just plano-restart # Restart Plano service
 just test          # Run all tests
 just check         # Lint and type check
 just db            # Reset database
@@ -109,7 +102,6 @@ The proxy runs as multiple services for zero-downtime deployments:
 
 - **proxy-core** (port 3001): Lightweight API proxy. Rarely changes.
 - **proxy-data** (port 3002): Dashboard APIs, statistics, indexing. Updated frequently.
-- **plano** (port 8080): Multi-LLM router for intelligent provider routing (optional).
 
 Caddy (port 3000) routes requests to the appropriate service.
 
@@ -134,10 +126,6 @@ providers:
   openai: # if enabling subagent routing
     api_key: "your-openai-key"  # Or set OPENAI_API_KEY env var
 
-  plano: # Optional: Multi-LLM router
-    base_url: "http://localhost:8080"  # or http://plano:8080 in Docker
-    format: "openai"
-
 storage:
   db_path: "requests.db"
 ```
@@ -154,8 +142,7 @@ subagents:
   enable: true  # Set to true to enable subagent routing
   mappings:
     code-reviewer: "openai:gpt-4o"
-    planner: "plano:gemini/gemini-2.0-flash-exp"
-    data-analyst: "plano:deepseek/deepseek-chat"
+    janitor: "zai:glm-4.6"
 ```
 
 2. **Set up your Claude Code agents** following Anthropic's official documentation:
@@ -175,101 +162,22 @@ subagents:
 ```
 Use case: Route code review tasks to GPT-4o for faster responses while keeping complex coding tasks on Claude.
 
-**Example 2: Planning Agent → Gemini via Plano**
+**Example 2: Multiple Providers**
 ```yaml
 # config.yaml
 providers:
-  plano:
-    base_url: "http://localhost:8080"
-    format: "openai"
+  zai:
+    base_url: "https://api.z.ai/api/anthropic"
+    api_key: "your-zai-key"
+    format: "anthropic"
 
 subagents:
   enable: true
   mappings:
-    planner: "plano:gemini/gemini-2.0-flash-exp"
-```
-Use case: Route planning tasks to Gemini for cost-effective, fast responses.
-
-**Example 3: Multiple Agents with Plano**
-```yaml
-# config.yaml
-subagents:
-  enable: true
-  mappings:
-    planner: "plano:gemini/gemini-2.0-flash-exp"
-    code-generator: "plano:deepseek/deepseek-coder"
-    security-auditor: "openai:gpt-4o"
-    budget-helper: "plano:qwen/qwen-max"
+    janitor: "zai:glm-4.6"
+    code-reviewer: "openai:gpt-4o"
 ```
 Use case: Different specialists for different tasks, optimizing for speed/cost/quality.
-
-### Plano Multi-LLM Router Setup
-
-Plano enables routing to multiple LLM providers (Gemini, DeepSeek, Qwen, etc.) through a single endpoint.
-
-#### Configuration
-
-1. **Configure providers in `plano_config.yaml`** (already included):
-   ```yaml
-   version: v0.1.0
-
-   listeners:
-     - name: egress_traffic
-       address: 0.0.0.0
-       port: 8080
-       message_format: openai
-
-   llm_providers:
-     - model: openai/gpt-4o
-       access_key: $OPENAI_API_KEY
-
-     - model: gemini/gemini-2.0-flash-exp
-       access_key: $GEMINI_API_KEY
-
-     - model: deepseek/deepseek-chat
-       access_key: $DEEPSEEK_API_KEY
-   ```
-
-2. **Set API keys in `.env`**:
-   ```bash
-   GEMINI_API_KEY=your-gemini-api-key
-   DEEPSEEK_API_KEY=sk-your-deepseek-key
-   DASHSCOPE_API_KEY=sk-your-qwen-key
-   ```
-
-3. **Enable Plano in Docker Compose**:
-
-   Plano is automatically included when using `just docker`. The service starts on port 8080 (internal to Docker network).
-
-4. **Route subagents to Plano** in `config.yaml`:
-   ```yaml
-   providers:
-     plano:
-       base_url: "http://plano:8080"  # Docker service name
-       format: "openai"
-
-   subagents:
-     enable: true
-     mappings:
-       planner: "plano:gemini/gemini-2.0-flash-exp"
-       code-helper: "plano:deepseek/deepseek-coder"
-   ```
-
-#### Plano Commands
-
-```bash
-# Start Plano service
-just plano-up
-
-# View Plano logs
-just plano-logs
-
-# Restart Plano
-just plano-restart
-
-# Stop all services (including Plano)
-just stop
-```
 
 ### Environment Variables
 
@@ -278,13 +186,6 @@ Override config via environment:
 - `OPENAI_API_KEY` - OpenAI API key
 - `DB_PATH` - Database path
 - `SUBAGENT_MAPPINGS` - Comma-separated mappings (e.g., `"code-reviewer:gpt-4o,data-analyst:o3"`)
-
-#### Plano Environment Variables
-
-Required for Plano to route to upstream providers:
-- `GEMINI_API_KEY` - Google Gemini API key
-- `DEEPSEEK_API_KEY` - DeepSeek API key
-- `DASHSCOPE_API_KEY` - Qwen (DashScope) API key
 
 ### Docker Environment Variables
 
@@ -337,7 +238,6 @@ claude-code-proxy/
 ├── docker/                # Docker configurations
 │   ├── Dockerfile.proxy-core   # proxy-core container
 │   ├── Dockerfile.proxy-data   # proxy-data container
-│   ├── Dockerfile.plano        # Plano multi-LLM router
 │   └── Caddyfile              # Caddy config for Docker
 ├── Dockerfile            # Monolith container
 ├── docker-compose.split.yml   # Split architecture (production)
@@ -347,7 +247,6 @@ claude-code-proxy/
 ├── run.sh                # Start script (monolith)
 ├── run-split.sh          # Start script (split architecture)
 ├── config.yaml.example   # Configuration template
-├── plano_config.yaml     # Plano multi-LLM router config
 └── README.md
 ```
 
@@ -364,12 +263,6 @@ claude-code-proxy/
 - Interactive request explorer
 - Conversation visualization
 - Performance metrics
-
-### Multi-LLM Routing (via Plano)
-- Access 11+ LLM providers: Gemini, DeepSeek, Qwen, Mistral, Groq, and more
-- Cost-effective alternatives to Claude/GPT-4
-- Seamless integration with subagent routing
-- Automatic format conversion (Anthropic ↔ OpenAI)
 
 ## License
 

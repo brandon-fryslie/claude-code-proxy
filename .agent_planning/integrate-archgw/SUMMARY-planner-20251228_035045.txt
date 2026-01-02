@@ -1,4 +1,0 @@
-Agent: status-planner | 20251228_035045
-Topic: integrate-archgw
-Files: PLAN-2025-12-28-034754.md, DOD-2025-12-28-034754.md
-Items: 4 (P0: 2, P1: 1, P2: 1)

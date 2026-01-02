@@ -11,9 +11,9 @@
 # - dashboard: New dashboard (port 5174) with HMR
 #
 # Usage:
-#   docker-compose -f docker-compose.dev.yml up --build
+#   docker compose -f docker-compose.dev.yml up --build
 #
-# For best HMR performance, use docker-compose.backend.yml instead
+# For best HMR performance, use docker compose -f docker-compose.backend.yml instead
 # and run frontends locally.
 
 version: '3.8'

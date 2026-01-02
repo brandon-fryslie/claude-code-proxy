@@ -25,7 +25,7 @@ run:
 
 # Run with Docker (backend in containers, frontends local for HMR)
 docker:
-    docker-compose -f docker-compose.backend.yml up -d --build
+    docker compose -f docker-compose.backend.yml up -d --build
     @echo ""
     @echo "Backend running. Starting frontends..."
     @echo "  API:       http://localhost:3000"
@@ -36,24 +36,12 @@ docker:
 
 # Stop Docker services
 stop:
-    docker-compose -f docker-compose.backend.yml down
-    docker-compose -f docker-compose.split.yml down 2>/dev/null || true
+    docker compose -f docker-compose.backend.yml down
+    docker compose -f docker-compose.split.yml down 2>/dev/null || true
 
 # Restart data service (zero-downtime update)
 restart-data:
-    docker-compose -f docker-compose.backend.yml up -d --no-deps --build proxy-data
-
-# Start just Plano service
-plano-up:
-    docker-compose -f docker-compose.backend.yml up -d plano
-
-# View Plano logs
-plano-logs:
-    docker-compose -f docker-compose.backend.yml logs -f plano
-
-# Restart Plano service
-plano-restart:
-    docker-compose -f docker-compose.backend.yml restart plano
+    docker compose -f docker-compose.backend.yml up -d --no-deps --build proxy-data
 
 # Run all tests
 test:
@@ -73,6 +61,6 @@ db:
 # Clean all build artifacts and Docker resources
 clean:
     rm -rf bin/ web/build/ web/.cache/ dashboard/dist/
-    docker-compose -f docker-compose.backend.yml down -v 2>/dev/null || true
-    docker-compose -f docker-compose.split.yml down -v 2>/dev/null || true
+    docker compose -f docker-compose.backend.yml down -v 2>/dev/null || true
+    docker compose -f docker-compose.split.yml down -v 2>/dev/null || true
     @echo "Cleaned"

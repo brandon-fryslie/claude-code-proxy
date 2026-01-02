@@ -17,7 +17,6 @@ providers:
     api_key: "..."
     base_url: "https://api.openai.com"
     format: "openai" #required
-    fallback_provider: "plano"  # Optional: fallback to Plano if OpenAI fails
     circuit_breaker:
       enabled: true
       max_failures: 5
@@ -26,20 +25,6 @@ providers:
   localllm:
     base_url: "localhost:1234"
     format: "openai" # required
-
-  # Plano (formerly ArchGW) - Multi-LLM routing proxy
-  # Plano routes requests to 11+ providers: Gemini, DeepSeek, Qwen, Mistral, Groq, etc.
-  # See: https://planoai.dev and https://github.com/katanemo/archgw
-  plano:
-    base_url: "http://localhost:8080"  # Or http://plano:8080 in Docker
-    format: "openai"  # Plano accepts OpenAI-format requests
-    fallback_provider: "anthropic"  # Optional: fallback to Anthropic if Plano fails
-    circuit_breaker:
-      enabled: true
-      max_failures: 3
-      timeout: "60s"
-    # Note: No api_key needed - Plano reads upstream API keys from environment:
-    #   OPENAI_API_KEY, GEMINI_API_KEY, DEEPSEEK_API_KEY, DASHSCOPE_API_KEY, etc.
 
 # Subagent Configuration
 # New style: We must refer to the specific provider as well as the model
@@ -55,21 +40,6 @@ subagents:
 
     # Z.ai routing
     janitor: "zai:glm-4.6"
-
-    # Plano routing - Access multiple providers through one proxy
-    # Plano model format: "provider/model-name"
-    # Examples:
-    #   gemini/gemini-2.0-flash-exp    - Google Gemini (fast, experimental)
-    #   deepseek/deepseek-chat         - DeepSeek (cost-effective)
-    #   deepseek/deepseek-coder        - DeepSeek Coder (code-focused)
-    #   qwen/qwen-max                  - Alibaba Qwen (general purpose)
-    #   mistral/mistral-large-latest   - Mistral (high quality)
-    #   groq/llama-3.3-70b-versatile   - Groq (fast inference)
-
-    # Example Plano subagent mappings:
-    # fast-helper: "plano:gemini/gemini-2.0-flash-exp"
-    # code-generator: "plano:deepseek/deepseek-coder"
-    # budget-agent: "plano:qwen/qwen-max"
 
 # Routing Configuration (Phase 3: Preference-Based Routing & Load Balancing)
 routing:
@@ -114,10 +84,5 @@ routing:
       speed: 7    # Good speed
       cost: 8     # Cost-effective
       quality: 7  # Good quality
-
-    plano:
-      speed: 7    # Depends on underlying provider
-      cost: 8     # Generally cost-effective
-      quality: 7  # Depends on underlying provider
 
 # NOTE: OLD CONFIGS ARE NOT SUPPORTED.

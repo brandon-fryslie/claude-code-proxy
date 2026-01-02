@@ -4,7 +4,7 @@
 # This gives you native HMR and the fastest development experience.
 #
 # Usage:
-#   docker-compose -f docker-compose.backend.yml up --build
+#   docker compose -f docker-compose.backend.yml up --build
 #   # Then in separate terminals:
 #   cd web && pnpm dev
 #   cd dashboard && pnpm dev
@@ -44,9 +44,6 @@ services:
     volumes:
       - ./data:/app/data
       - ./config.yaml:/app/config.yaml:ro
-    depends_on:
-      plano:
-        condition: service_healthy
     networks:
       - proxy-network
 
@@ -68,32 +65,6 @@ services:
       - ~/.claude/projects:/root/.claude/projects:ro
     networks:
       - proxy-network
-
-  # Plano - Multi-LLM router
-  plano:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.plano
-    container_name: claude-proxy-plano
-    restart: unless-stopped
-    expose:
-      - "8080"
-    environment:
-      # API keys for upstream providers
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
-      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
-      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
-    volumes:
-      - ./plano_config.yaml:/etc/plano/config.yaml:ro
-    networks:
-      - proxy-network
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
 
 networks:
   proxy-network:

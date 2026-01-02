@@ -37,15 +37,8 @@ func main() {
 			baseProviders[name] = provider.NewAnthropicProvider(name, providerCfg)
 			logger.Printf("📡 Initialized Anthropic-format provider: %s (%s)", name, providerCfg.BaseURL)
 		case "openai":
-			// For Plano provider, use PlanoProvider for better logging and future extensibility
-			// Otherwise use OpenAIProvider for standard OpenAI API
-			if name == "plano" {
-				baseProviders[name] = provider.NewPlanoProvider(name, providerCfg)
-				logger.Printf("📡 Initialized Plano (multi-LLM) provider: %s (%s)", name, providerCfg.BaseURL)
-			} else {
-				baseProviders[name] = provider.NewOpenAIProvider(name, providerCfg)
-				logger.Printf("📡 Initialized OpenAI-format provider: %s (%s)", name, providerCfg.BaseURL)
-			}
+			baseProviders[name] = provider.NewOpenAIProvider(name, providerCfg)
+			logger.Printf("📡 Initialized OpenAI-format provider: %s (%s)", name, providerCfg.BaseURL)
 		default:
 			logger.Printf("⚠️  Unknown provider format '%s' for provider '%s', skipping", providerCfg.Format, name)
 		}
