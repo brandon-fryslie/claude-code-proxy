@@ -95,6 +95,11 @@ func (s *SQLiteStorageService) createTables() error {
 			return err
 		}
 	}
+	// ALWAYS run conversation search migrations (for both fresh and existing databases)
+	if err := s.runConversationSearchMigrations(); err != nil {
+		return err
+	}
+
 
 	return nil
 }
@@ -124,10 +129,6 @@ func (s *SQLiteStorageService) runMigrations() error {
 	s.db.Exec("CREATE INDEX IF NOT EXISTS idx_subagent ON requests(subagent_name)")
 	s.db.Exec("CREATE INDEX IF NOT EXISTS idx_timestamp_provider ON requests(timestamp DESC, provider)")
 
-	// Run conversation search migrations
-	if err := s.runConversationSearchMigrations(); err != nil {
-		return err
-	}
 
 	return nil
 }
@@ -1406,7 +1407,7 @@ func (s *SQLiteStorageService) SearchConversations(opts model.SearchOptions) (*m
 	}
 	defer rows.Close()
 
-	var results []*model.ConversationMatch
+	results := make([]*model.ConversationMatch, 0)
 	for rows.Next() {
 		var match model.ConversationMatch
 		var lastActivity sql.NullString
