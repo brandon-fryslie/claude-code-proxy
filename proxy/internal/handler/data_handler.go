@@ -563,13 +563,16 @@ func (h *DataHandler) SearchConversations(w http.ResponseWriter, r *http.Request
 		Offset:      offset,
 	}
 
+	log.Printf("🔍 Searching conversations: query=%q, project=%q, limit=%d, offset=%d", query, projectPath, limit, offset)
+
 	results, err := h.storageService.SearchConversations(opts)
 	if err != nil {
-		log.Printf("❌ Error searching conversations: %v", err)
+		log.Printf("❌ Error searching conversations (query=%q, project=%q): %v", query, projectPath, err)
 		writeErrorResponse(w, "Failed to search conversations", http.StatusInternalServerError)
 		return
 	}
 
+	log.Printf("✅ Search completed: found %d results (total: %d)", len(results.Results), results.Total)
 	writeJSONResponse(w, results)
 }
 
