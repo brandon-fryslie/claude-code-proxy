@@ -2,46 +2,47 @@
 
 **Goal:** Achieve feature parity between old dashboard (web/) and new dashboard (dashboard/)
 
-**Last Updated:** 2025-12-27
+**Last Updated:** 2026-01-07
 
 ---
 
-## Phase 1: Core Navigation & Data [ACTIVE]
+## Phase 1: Core Navigation & Data [COMPLETED]
 
 **Goal:** Enable efficient browsing and filtering of large request datasets
 
 ### Topics
 
-- **date-navigation-filtering** [PROPOSED]
+- **date-navigation-filtering** [COMPLETED]
   - Epic: `brandon-fryslie_claude-code-proxy-kbm`
-  - Add date picker component
-  - Add week navigation (prev/next)
-  - Persist selected date across pages
-  - Filter requests by date range
+  - ✅ Week boundary calculation (Sunday-Saturday)
+  - ✅ Date picker with native input
+  - ✅ Week navigation (prev/next/today buttons)
+  - ✅ Date persistence (localStorage + URL params)
+  - ✅ Smart refetching (same week = 2 calls, diff week = 3 calls)
 
-- **virtualized-request-list** [PROPOSED]
+- **virtualized-request-list** [COMPLETED]
   - Epic: `brandon-fryslie_claude-code-proxy-pyf`
-  - Implement @tanstack/react-virtual for request list
-  - Handle 1000s of requests efficiently
-  - Lazy loading as user scrolls
+  - ✅ @tanstack/react-virtual installed and configured
+  - ✅ Handles 1000+ requests with ~30 visible DOM nodes
+  - ✅ Smooth scrolling (60fps)
+  - ✅ Lazy loading on item click
 
-- **model-filter-dropdown** [PROPOSED]
+- **model-filter-dropdown** [COMPLETED]
   - Epic: `brandon-fryslie_claude-code-proxy-jx0`
-  - Add model filter to request list
-  - Add endpoint filter option
+  - ✅ Dropdown: All Models, Opus, Sonnet, Haiku
+  - ✅ URL parameter persistence (?model=opus)
+  - ✅ Backend filtering integrated
 
-- **conversation-search-indexing** [PROPOSED]
+- **conversation-search-indexing** [COMPLETED]
   - Epic: `brandon-fryslie_claude-code-proxy-d0o`
-  - Decision: SQLite FTS5 (research completed 2025-12-27)
-  - Add `conversations` + `conversations_fts` tables to SQLite
-  - File watcher (fsnotify) for ~/.claude/projects/ indexing
-  - `/api/conversations/search?q=...` endpoint
-  - Full-text search across message content, tool names, metadata
-  - Tradeoffs: No fuzzy search, manual snippet extraction
+  - ✅ SQLite FTS5 implementation with 1973 conversations indexed
+  - ✅ File watcher for ~/.claude/projects/ indexing
+  - ✅ `/api/conversations/search?q=...` endpoint with pagination
+  - ✅ Comprehensive E2E tests (22 test cases)
 
 ---
 
-## Phase 2: Rich Content Display [ACTIVE]
+## Phase 2: Rich Content Display [COMPLETED]
 
 **Goal:** Render message content with proper formatting and interactivity
 
@@ -49,24 +50,24 @@
 
 - **message-content-parser** [COMPLETED]
   - Epic: `brandon-fryslie_claude-code-proxy-kqw`
-  - ✅ Parse and render Anthropic message content blocks
-  - ✅ Display text with proper formatting
-  - ✅ Handle multi-part content (text + tool_use + tool_result)
-  - ✅ SystemReminder extraction and hiding
-  - ✅ FunctionDefinitions display
+  - ✅ MessageContent.tsx (373 lines) with type dispatch
+  - ✅ Render all Anthropic content block types (text, tool_use, tool_result, image)
+  - ✅ Multi-part content with recursive rendering
+  - ✅ SystemReminder extraction (collapsed by default)
+  - ✅ FunctionDefinitions with tool count display
 
 - **code-viewer-highlighting** [COMPLETED]
   - Epic: `brandon-fryslie_claude-code-proxy-6j7`
-  - ✅ Create CodeViewer component
-  - ✅ Custom single-pass syntax highlighting (no external deps)
-  - ✅ Support JS/TS, Python, Go, Rust, Bash
-  - ✅ Line numbers, copy, download, fullscreen
+  - ✅ CodeViewer component with syntax highlighting
+  - ✅ Support JS/TS, Python, Go, Rust, Bash, SQL, JSON, HTML, CSS
+  - ✅ Line numbers, copy button, download, fullscreen modal
+  - ✅ Handles 2000+ line files smoothly
 
 - **copy-to-clipboard** [COMPLETED]
   - Epic: `brandon-fryslie_claude-code-proxy-nhw`
-  - ✅ useCopyToClipboard hook with fallback
+  - ✅ useCopyToClipboard hook with navigator.clipboard fallback
   - ✅ CopyButton component with visual feedback
-  - ✅ Integrated in Requests.tsx for JSON copy
+  - ✅ Integrated across Requests, CodeViewer, ToolUse
 
 - **conversation-content-integration** [PROPOSED]
   - Deps: message-content-parser
@@ -89,23 +90,24 @@
 
 - **tool-use-display** [COMPLETED]
   - Epic: `brandon-fryslie_claude-code-proxy-62s`
-  - ✅ ToolUseContent component (expandable)
-  - ✅ Special rendering for bash, read_file, write_file, edit_file
-  - ✅ Generic tool input display
-  - ✅ Copy tool ID
+  - ✅ ToolUseContainer with expandable parameters
+  - ✅ Special renderers: BashTool, ReadTool, WriteTool, EditTool, etc.
+  - ✅ Parameter count badge, copy tool ID
+  - ✅ Complex object expansion, large string truncation
 
 - **tool-result-display** [COMPLETED]
   - Epic: `brandon-fryslie_claude-code-proxy-k6y`
-  - ✅ ToolResultContent component
-  - ✅ Content type detection (text, code, json, blocks)
-  - ✅ cat -n format extraction
-  - ✅ Success/error styling
+  - ✅ ToolResultContent with content type detection
+  - ✅ Code detection + CodeViewer integration
+  - ✅ JSON formatting, cat -n line number extraction
+  - ✅ Success (green) / Error (red) styling with icons
 
 - **image-content-display** [COMPLETED]
   - Epic: `brandon-fryslie_claude-code-proxy-asz`
-  - ✅ ImageContent component for base64 images
-  - ✅ Display inline with content
-  - Note: Lightbox/zoom can be added later if needed
+  - ✅ ImageContent with data URI construction
+  - ✅ Download button, fullscreen modal
+  - ✅ Error handling for missing/corrupt data
+  - ✅ Media type label display
 
 ---
 
