@@ -1,15 +1,10 @@
 import { type FC } from 'react'
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, getWeekBoundaries, formatWeekRange } from '@/lib/utils'
 import { useDateRange } from '@/lib/DateRangeContext'
 
 export const GlobalDatePicker: FC = () => {
-  const { selectedDate, setSelectedDate, presetRange, setPresetRange } = useDateRange()
-
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-
-  const isAtToday = selectedDate >= today
+  const { selectedDate, setSelectedDate, presetRange, setPresetRange, navigateWeek, isAtToday } = useDateRange()
 
   const goBack = () => {
     const newDate = new Date(selectedDate)
@@ -37,6 +32,9 @@ export const GlobalDatePicker: FC = () => {
     })
   }
 
+  const { weekStart, weekEnd } = getWeekBoundaries(selectedDate)
+  const weekRangeDisplay = formatWeekRange(weekStart, weekEnd)
+
   const presets: { value: 'today' | 'week' | 'month'; label: string }[] = [
     { value: 'today', label: 'Today' },
     { value: 'week', label: '7d' },
@@ -63,7 +61,7 @@ export const GlobalDatePicker: FC = () => {
         ))}
       </div>
 
-      {/* Date navigation */}
+      {/* Date navigation - Day mode */}
       <div className="flex items-center gap-1">
         <button
           onClick={goBack}
@@ -102,6 +100,37 @@ export const GlobalDatePicker: FC = () => {
             Today
           </button>
         )}
+      </div>
+
+      {/* Week navigation */}
+      <div className="flex items-center gap-1 border-l border-[var(--color-border)] pl-3">
+        <button
+          onClick={() => navigateWeek('prev')}
+          className="p-1.5 rounded-md hover:bg-[var(--color-bg-hover)] transition-colors text-[var(--color-text-secondary)]"
+          title="Previous week"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+
+        <div className="px-2 py-1 bg-[var(--color-bg-secondary)] rounded-md border border-[var(--color-border)] min-w-[140px] text-center">
+          <span className="text-xs font-medium text-[var(--color-text-primary)]">
+            {weekRangeDisplay}
+          </span>
+        </div>
+
+        <button
+          onClick={() => navigateWeek('next')}
+          disabled={isAtToday}
+          className={cn(
+            'p-1.5 rounded-md transition-colors',
+            isAtToday
+              ? 'text-[var(--color-text-muted)] cursor-not-allowed'
+              : 'hover:bg-[var(--color-bg-hover)] text-[var(--color-text-secondary)]'
+          )}
+          title="Next week"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
       </div>
     </div>
   )
