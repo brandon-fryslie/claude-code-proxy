@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { PageHeader } from '@/components/layout'
 import { ResizablePanel, PanelGroup, Panel } from '@/components/layout'
@@ -237,7 +237,18 @@ function RequestDetail({ requestId }: { requestId: string | null }) {
 export function RequestsPage() {
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
-  const [modelFilter, setModelFilter] = useState<string>('all')
+
+  // Initialize model filter from URL parameter
+  const [modelFilter, setModelFilterState] = useState<string>(() => {
+    const params = new URLSearchParams(window.location.search)
+    const model = params.get('model')
+    // Validate that the model is one of our allowed values
+    if (model && ['opus', 'sonnet', 'haiku'].includes(model)) {
+      return model
+    }
+    return 'all'
+  })
+
   const [compareState, setCompareState] = useState<CompareState>({
     enabled: false,
     selectedIds: [],
@@ -256,6 +267,22 @@ export function RequestsPage() {
   const { data: requests, isLoading, refetch } = useRequestsSummary({
     model: modelFilter === 'all' ? undefined : modelFilter
   })
+
+  // Update URL parameter when model filter changes
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    if (modelFilter === 'all') {
+      url.searchParams.delete('model')
+    } else {
+      url.searchParams.set('model', modelFilter)
+    }
+    window.history.replaceState({}, '', url)
+  }, [modelFilter])
+
+  // Wrapper for setModelFilter that also updates URL
+  const setModelFilter = (model: string) => {
+    setModelFilterState(model)
+  }
 
   const filteredRequests = requests?.filter(r => {
     if (!searchQuery) return true
