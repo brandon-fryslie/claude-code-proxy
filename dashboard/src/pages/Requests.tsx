@@ -3,7 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { PageHeader } from '@/components/layout'
 import { ResizablePanel, PanelGroup, Panel } from '@/components/layout'
 import { cn } from '@/lib/utils'
-import { ChevronRight, Clock, ArrowRight, Search, GitCompare, User, Bot } from 'lucide-react'
+import { ChevronRight, Clock, ArrowRight, Search, GitCompare, User, Bot, Filter } from 'lucide-react'
 import { useRequestsSummary, useRequestDetail, formatDuration, clearAllRequests } from '@/lib/api'
 import { useQueryClient } from '@tanstack/react-query'
 import type { RequestSummary as RequestSummaryType, RequestLog } from '@/lib/types'
@@ -237,6 +237,7 @@ function RequestDetail({ requestId }: { requestId: string | null }) {
 export function RequestsPage() {
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [modelFilter, setModelFilter] = useState<string>('all')
   const [compareState, setCompareState] = useState<CompareState>({
     enabled: false,
     selectedIds: [],
@@ -251,8 +252,10 @@ export function RequestsPage() {
   const parentRef = useRef<HTMLDivElement>(null)
 
   const queryClient = useQueryClient()
-  // Remove limit to fetch all requests
-  const { data: requests, isLoading, refetch } = useRequestsSummary()
+  // Fetch requests with model filter
+  const { data: requests, isLoading, refetch } = useRequestsSummary({
+    model: modelFilter === 'all' ? undefined : modelFilter
+  })
 
   const filteredRequests = requests?.filter(r => {
     if (!searchQuery) return true
@@ -388,6 +391,24 @@ export function RequestsPage() {
               isRefreshing={isRefreshing}
               lastRefresh={lastRefresh}
             />
+            {/* Model Filter Dropdown */}
+            <div className="relative">
+              <Filter size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] pointer-events-none" />
+              <select
+                value={modelFilter}
+                onChange={(e) => setModelFilter(e.target.value)}
+                className="pl-7 pr-8 py-1.5 text-sm bg-[var(--color-bg-tertiary)] border border-[var(--color-border)] rounded text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-accent)] appearance-none cursor-pointer"
+              >
+                <option value="all">All Models</option>
+                <option value="opus">Opus</option>
+                <option value="sonnet">Sonnet</option>
+                <option value="haiku">Haiku</option>
+              </select>
+              <ChevronRight
+                size={12}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rotate-90 text-[var(--color-text-muted)] pointer-events-none"
+              />
+            </div>
             <div className="relative">
               <Search size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
               <input
@@ -422,8 +443,13 @@ export function RequestsPage() {
                   Loading requests...
                 </div>
               ) : filteredRequests.length === 0 ? (
-                <div className="flex items-center justify-center h-32 text-[var(--color-text-muted)]">
-                  No requests found
+                <div className="flex flex-col items-center justify-center h-32 text-[var(--color-text-muted)]">
+                  <p>No requests found</p>
+                  {modelFilter !== 'all' && (
+                    <p className="text-xs mt-1">
+                      No {modelFilter} requests match the current filter
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div
