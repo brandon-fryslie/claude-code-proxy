@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { PageHeader } from '@/components/layout'
 import { ResizablePanel, PanelGroup, Panel } from '@/components/layout'
 import { cn } from '@/lib/utils'
@@ -246,8 +247,12 @@ export function RequestsPage() {
   const [compareRequests, setCompareRequests] = useState<{ request1: RequestLog; request2: RequestLog } | null>(null)
   const [isLoadingCompare, setIsLoadingCompare] = useState(false)
 
+  // Ref for virtualization scroll container
+  const parentRef = useRef<HTMLDivElement>(null)
+
   const queryClient = useQueryClient()
-  const { data: requests, isLoading, refetch } = useRequestsSummary({ limit: 100 })
+  // Remove limit to fetch all requests
+  const { data: requests, isLoading, refetch } = useRequestsSummary()
 
   const filteredRequests = requests?.filter(r => {
     if (!searchQuery) return true
@@ -258,6 +263,14 @@ export function RequestsPage() {
       r.requestId.toLowerCase().includes(query)
     )
   }) || []
+
+  // Set up virtualizer for requests list
+  const virtualizer = useVirtualizer({
+    count: filteredRequests.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 60, // Estimated height of RequestListItem (smaller than old dashboard)
+    overscan: 5, // Render 5 extra items above and below viewport for smooth scrolling
+  })
 
   const toggleCompareMode = () => {
     setCompareState({
@@ -403,7 +416,7 @@ export function RequestsPage() {
       <div className="flex-1 overflow-hidden">
         <PanelGroup>
           <ResizablePanel defaultWidth={400} minWidth={300} maxWidth={600}>
-            <div className="h-full overflow-auto bg-[var(--color-bg-secondary)] border-r border-[var(--color-border)]">
+            <div className="h-full flex flex-col bg-[var(--color-bg-secondary)] border-r border-[var(--color-border)]">
               {isLoading ? (
                 <div className="flex items-center justify-center h-32 text-[var(--color-text-muted)]">
                   Loading requests...
@@ -413,17 +426,43 @@ export function RequestsPage() {
                   No requests found
                 </div>
               ) : (
-                filteredRequests.map((request) => (
-                  <RequestListItem
-                    key={request.requestId}
-                    request={request}
-                    isSelected={selectedRequestId === request.requestId}
-                    onClick={() => setSelectedRequestId(request.requestId)}
-                    compareMode={compareState.enabled}
-                    isCompareSelected={compareState.selectedIds.includes(request.requestId)}
-                    onCompareToggle={() => toggleRequestSelection(request.requestId)}
-                  />
-                ))
+                <div
+                  ref={parentRef}
+                  className="flex-1 overflow-auto"
+                >
+                  <div
+                    style={{
+                      height: `${virtualizer.getTotalSize()}px`,
+                      width: '100%',
+                      position: 'relative',
+                    }}
+                  >
+                    {virtualizer.getVirtualItems().map((virtualItem) => {
+                      const request = filteredRequests[virtualItem.index]
+                      return (
+                        <div
+                          key={request.requestId}
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            transform: `translateY(${virtualItem.start}px)`,
+                          }}
+                        >
+                          <RequestListItem
+                            request={request}
+                            isSelected={selectedRequestId === request.requestId}
+                            onClick={() => setSelectedRequestId(request.requestId)}
+                            compareMode={compareState.enabled}
+                            isCompareSelected={compareState.selectedIds.includes(request.requestId)}
+                            onCompareToggle={() => toggleRequestSelection(request.requestId)}
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
               )}
             </div>
           </ResizablePanel>
