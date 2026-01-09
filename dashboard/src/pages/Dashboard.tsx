@@ -1,9 +1,12 @@
+import { useState } from 'react'
 import { PageHeader, PageContent } from '@/components/layout'
 import { Activity, BarChart3, Clock, Zap } from 'lucide-react'
 import { useHourlyStats, useProviderStats, formatDuration, formatTokens } from '@/lib/api'
 import { useDateRange } from '@/lib/DateRangeContext'
 import { HourlyUsageChart } from '@/components/charts'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
+import { RefreshButton } from '@/components/features/RefreshButton'
+import { useQueryClient } from '@tanstack/react-query'
 
 interface StatCardProps {
   label: string
@@ -43,6 +46,10 @@ export function DashboardPage() {
   const { data: hourlyStats, isLoading: isLoadingHourly } = useHourlyStats(dateRange)
   const { data: providerStats, isLoading: isLoadingProviders } = useProviderStats(dateRange)
 
+  const queryClient = useQueryClient()
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
+
   // Format range label
   const rangeLabel = presetRange === 'today' ? 'Today' :
                      presetRange === 'week' ? 'Last 7 Days' :
@@ -61,11 +68,31 @@ export function DashboardPage() {
   const avgResponseTime = hourlyStats?.avgResponseTime || 0
   const activeProviders = providerStats?.providers?.length || 0
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    try {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['stats', 'hourly'] }),
+        queryClient.invalidateQueries({ queryKey: ['stats', 'providers'] })
+      ])
+      setLastRefresh(new Date())
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
   return (
     <>
       <PageHeader
         title="Dashboard"
         description="Overview of proxy activity and usage"
+        actions={
+          <RefreshButton
+            onRefresh={handleRefresh}
+            isRefreshing={isRefreshing}
+            lastRefresh={lastRefresh}
+          />
+        }
       />
       <PageContent>
         {/* Stats Grid */}

@@ -23,25 +23,17 @@ build:
 run:
     ./run-split.sh
 
-# Run with Docker (backend in containers, frontends local for HMR)
-docker:
-    docker compose -f docker-compose.backend.yml up -d --build
-    @echo ""
-    @echo "Backend running. Starting frontends..."
-    @echo "  API:       http://localhost:3000"
-    @echo "  Web:       http://localhost:5173"
-    @echo "  Dashboard: http://localhost:5174"
-    @echo ""
-    cd web && pnpm dev & cd dashboard && pnpm dev
+# Run with podman (complete dev stack with HMR)
+dev:
+    podman-compose up --build
 
-# Stop Docker services
+# Stop podman services
 stop:
-    docker compose -f docker-compose.backend.yml down
-    docker compose -f docker-compose.split.yml down 2>/dev/null || true
+    podman-compose down
 
 # Restart data service (zero-downtime update)
 restart-data:
-    docker compose -f docker-compose.backend.yml up -d --no-deps --build proxy-data
+    podman-compose up -d --no-deps --build proxy-data
 
 # Run all tests
 test:
@@ -58,9 +50,8 @@ db:
     rm -f requests.db data/requests.db
     @echo "Database reset"
 
-# Clean all build artifacts and Docker resources
+# Clean all build artifacts and podman resources
 clean:
     rm -rf bin/ web/build/ web/.cache/ dashboard/dist/
-    docker compose -f docker-compose.backend.yml down -v 2>/dev/null || true
-    docker compose -f docker-compose.split.yml down -v 2>/dev/null || true
+    podman-compose down -v 2>/dev/null || true
     @echo "Cleaned"

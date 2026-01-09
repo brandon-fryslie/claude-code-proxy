@@ -1,0 +1,28 @@
+Agent: iterative-implementer | 2026-01-03T06:15:46Z
+Mode: manual
+Completed: Enhanced conversation search error logging | Files: 1 | Commits: 1
+Cache invalidated: None (no cache exists yet)
+Status: complete
+
+Summary:
+The conversation search API endpoint was reported as broken, but investigation revealed
+it was actually working correctly. The issue was likely a stale build or process.
+
+However, the error logging was inadequate - it only showed a generic error message
+without any context about what query failed or why.
+
+Changes made:
+1. Added detailed request logging showing query parameters before search
+2. Added success logging showing result count after search  
+3. Enhanced error logging to include query and project path for debugging
+4. Tested with real search query ("test") - confirmed 1269 results returned
+
+The endpoint now provides clear visibility into:
+- What search was attempted (query="X", project="Y", limit=Z, offset=W)
+- Whether it succeeded (found N results, total: M)
+- If it failed, what query caused the failure
+
+Tests:
+- all Go tests pass (go test -tags "fts5" ./...)
+- Manual test confirmed search works and logging is helpful
+- Build successful with FTS5 tags enabled

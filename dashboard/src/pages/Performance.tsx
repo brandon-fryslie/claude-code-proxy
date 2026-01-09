@@ -1,12 +1,19 @@
+import { useState } from 'react'
 import { PageHeader, PageContent } from '@/components/layout'
 import { Zap } from 'lucide-react'
 import { usePerformanceStats, formatDuration } from '@/lib/api'
 import { useDateRange } from '@/lib/DateRangeContext'
 import { PerformanceChart } from '@/components/charts'
+import { RefreshButton } from '@/components/features/RefreshButton'
+import { useQueryClient } from '@tanstack/react-query'
 
 export function PerformancePage() {
   const { dateRange } = useDateRange()
   const { data: perfStats, isLoading } = usePerformanceStats(dateRange)
+
+  const queryClient = useQueryClient()
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
 
   // Calculate overall stats
   const overallStats = perfStats?.stats?.reduce(
@@ -36,11 +43,28 @@ export function PerformancePage() {
     ? Math.round(overallStats.p99ResponseMs / overallStats.requestCount)
     : 0
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    try {
+      await queryClient.invalidateQueries({ queryKey: ['stats', 'performance'] })
+      setLastRefresh(new Date())
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
   return (
     <>
       <PageHeader
         title="Performance"
         description="Response times and latency analysis"
+        actions={
+          <RefreshButton
+            onRefresh={handleRefresh}
+            isRefreshing={isRefreshing}
+            lastRefresh={lastRefresh}
+          />
+        }
       />
       <PageContent>
         {/* Stats Grid */}

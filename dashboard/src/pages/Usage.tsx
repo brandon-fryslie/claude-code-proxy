@@ -1,15 +1,22 @@
+import { useState } from 'react'
 import { PageHeader, PageContent } from '@/components/layout'
 import { BarChart3 } from 'lucide-react'
 import { useModelStats, useWeeklyStats, formatTokens } from '@/lib/api'
 import { useDateRange } from '@/lib/DateRangeContext'
 import { WeeklyUsageChart, ModelBreakdownChart, ModelComparisonBar } from '@/components/charts'
 import { toISODateString } from '@/lib/chartUtils'
+import { RefreshButton } from '@/components/features/RefreshButton'
+import { useQueryClient } from '@tanstack/react-query'
 
 export function UsagePage() {
   const { dateRange, selectedDate, setSelectedDate, presetRange } = useDateRange()
 
   const { data: modelStats, isLoading: isLoadingModels } = useModelStats(dateRange)
   const { data: weeklyStats, isLoading: isLoadingWeekly } = useWeeklyStats()
+
+  const queryClient = useQueryClient()
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
 
   // Calculate tokens for selected range
   const rangeTokens = modelStats?.modelStats?.reduce((acc, m) => acc + m.tokens, 0) || 0
@@ -29,11 +36,31 @@ export function UsagePage() {
                      presetRange === 'month' ? 'Last 30 Days' :
                      selectedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    try {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['stats', 'models'] }),
+        queryClient.invalidateQueries({ queryKey: ['stats', 'weekly'] })
+      ])
+      setLastRefresh(new Date())
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
   return (
     <>
       <PageHeader
         title="Token Usage"
         description="Analyze token consumption across providers and models"
+        actions={
+          <RefreshButton
+            onRefresh={handleRefresh}
+            isRefreshing={isRefreshing}
+            lastRefresh={lastRefresh}
+          />
+        }
       />
       <PageContent>
         {/* Stats Grid */}

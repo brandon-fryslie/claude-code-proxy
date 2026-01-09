@@ -2,7 +2,7 @@
 # This service handles /v1/messages, /v1/models, /health endpoints
 # Optimized for stability - rarely needs updates
 
-FROM golang:1.21-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 WORKDIR /app
 

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { PageHeader, PageContent } from '@/components/layout'
 import { GitBranch, ArrowRight, Server, Settings, Key } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -9,6 +10,8 @@ import {
   formatDuration,
 } from '@/lib/api'
 import { useDateRange } from '@/lib/DateRangeContext'
+import { RefreshButton } from '@/components/features/RefreshButton'
+import { useQueryClient } from '@tanstack/react-query'
 import type { ProviderConfig } from '@/lib/types'
 
 function ProviderCard({ name, config }: { name: string; config: ProviderConfig }) {
@@ -110,6 +113,10 @@ export function RoutingPage() {
   const { data: providers, isLoading: providersLoading } = useProviders()
   const { data: subagentConfig, isLoading: subagentLoading } = useSubagentConfig()
 
+  const queryClient = useQueryClient()
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
+
   const totalRouted = subagentStats?.subagents?.reduce((acc, s) => acc + s.requests, 0) || 0
   const totalTokens = subagentStats?.subagents?.reduce((acc, s) => acc + s.totalTokens, 0) || 0
   const avgLatency =
@@ -120,11 +127,32 @@ export function RoutingPage() {
         )
       : 0
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    try {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['stats', 'subagents'] }),
+        queryClient.invalidateQueries({ queryKey: ['config', 'providers'] }),
+        queryClient.invalidateQueries({ queryKey: ['config', 'subagents'] })
+      ])
+      setLastRefresh(new Date())
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
   return (
     <>
       <PageHeader
         title="Provider Routing"
         description="View provider configuration and subagent routing"
+        actions={
+          <RefreshButton
+            onRefresh={handleRefresh}
+            isRefreshing={isRefreshing}
+            lastRefresh={lastRefresh}
+          />
+        }
       />
       <PageContent>
         <div className="max-w-5xl space-y-8">

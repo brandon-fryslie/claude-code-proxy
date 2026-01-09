@@ -2,7 +2,7 @@
 
 **Goal:** Achieve feature parity between old dashboard (web/) and new dashboard (dashboard/)
 
-**Last Updated:** 2026-01-07
+**Last Updated:** 2026-01-09
 
 ---
 
@@ -111,7 +111,48 @@
 
 ---
 
-## Phase 4: Charts & Analytics [QUEUED]
+## Phase 4: Priority Features [ACTIVE]
+
+**Goal:** High-value features for power users and provider flexibility
+
+### Topics
+
+- **conversation-threads** [PROPOSED]
+  - Epic: `brandon-fryslie_claude-code-proxy-jaq`
+  - Full message thread display
+  - User/Assistant message bubbles
+  - Tool calls inline
+
+- **web-routing-configuration** [PROPOSED]
+  - Configure subagent-to-provider routing from web UI
+  - View/edit config.yaml subagent mappings
+  - Add/remove/modify routing rules
+  - Persist changes to config file
+  - Reload proxy configuration
+
+- **data-management** [PROPOSED]
+  - Epic: `brandon-fryslie_claude-code-proxy-5jo`
+  - Add refresh button
+  - Add clear all requests button
+  - Settings for auto-refresh
+
+- **multi-provider-comparison** [PROPOSED]
+  - Send same prompt to multiple providers simultaneously
+  - Side-by-side response comparison view
+  - Compare response quality, latency, token usage
+  - Select providers/models to include in comparison
+  - Save comparison results for later review
+
+- **vibeproxy-feature-analysis** [PROPOSED]
+  - Research: Analyze VibeProxy features for potential adoption
+  - Compare provider support (Gemini, Qwen, Antigravity, GitHub Copilot)
+  - Evaluate OAuth authentication approach
+  - Assess multi-account round-robin/failover
+  - Document feature gap analysis
+
+---
+
+## Phase 5: Charts & Analytics [QUEUED]
 
 **Goal:** Comprehensive usage visualization and metrics
 
@@ -137,9 +178,9 @@
 
 ---
 
-## Phase 5: Advanced Features [QUEUED]
+## Phase 6: Additional Features [QUEUED]
 
-**Goal:** Power user features for deep analysis
+**Goal:** Extended functionality and integrations
 
 ### Topics
 
@@ -148,39 +189,6 @@
   - Multi-select requests
   - Side-by-side diff view
   - Compare tokens, timing, content
-
-- **conversation-threads** [PROPOSED]
-  - Epic: `brandon-fryslie_claude-code-proxy-jaq`
-  - Full message thread display
-  - User/Assistant message bubbles
-  - Tool calls inline
-
-- **data-management** [PROPOSED]
-  - Epic: `brandon-fryslie_claude-code-proxy-5jo`
-  - Add refresh button
-  - Add clear all requests button
-  - Settings for auto-refresh
-
-- **web-routing-configuration** [PROPOSED]
-  - Configure subagent-to-provider routing from web UI
-  - View/edit config.yaml subagent mappings
-  - Add/remove/modify routing rules
-  - Persist changes to config file
-  - Reload proxy configuration
-
-- **multi-provider-comparison** [PROPOSED]
-  - Send same prompt to multiple providers simultaneously
-  - Side-by-side response comparison view
-  - Compare response quality, latency, token usage
-  - Select providers/models to include in comparison
-  - Save comparison results for later review
-
-- **vibeproxy-feature-analysis** [PROPOSED]
-  - Research: Analyze VibeProxy features for potential adoption
-  - Compare provider support (Gemini, Qwen, Antigravity, GitHub Copilot)
-  - Evaluate OAuth authentication approach
-  - Assess multi-account round-robin/failover
-  - Document feature gap analysis
 
 - **oauth-authentication** [PROPOSED]
   - OAuth login to use existing AI subscriptions (ChatGPT Plus, Claude Pro, etc.)
@@ -191,7 +199,7 @@
 
 ---
 
-## Phase 6: Testing & Polish [QUEUED]
+## Phase 7: Testing & Polish [QUEUED]
 
 **Goal:** Ensure reliability and production readiness
 

@@ -1,0 +1,168 @@
+# Claude Code Proxy - Complete Development Stack with HMR
+#
+# This is the single source of truth for running the entire project.
+# Includes all services: reverse proxy, backend services, and frontend dashboards.
+#
+# Uses podman-compose (drop-in replacement for docker-compose)
+#
+# Usage:
+#   podman-compose up --build              # Start everything with logs
+#   podman-compose up -d                   # Start in background
+#   podman-compose down                    # Stop everything
+#   podman-compose logs -f proxy-core      # Follow logs for specific service
+#
+# Or use: just dev, just stop, just restart-data
+#
+# Access:
+#   API Proxy:        http://localhost:3000
+#   Web Dashboard:    http://localhost:5173
+#   Dashboard:        http://localhost:5174
+
+version: '3.8'
+
+services:
+  # Caddy reverse proxy - unified entrypoint
+  # Routes /v1/* to proxy-core, /api/* to proxy-data, / to dashboards
+  caddy:
+    image: caddy:2-alpine
+    container_name: claude-proxy-caddy
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      proxy-core:
+        condition: service_healthy
+      proxy-data:
+        condition: service_healthy
+    networks:
+      - proxy-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  # proxy-core - Lightweight API proxy
+  # Handles: /v1/messages, /v1/models, /health endpoints
+  # Rarely changes - stable service
+  proxy-core:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.proxy-core
+    container_name: claude-proxy-core
+    restart: unless-stopped
+    expose:
+      - "3001"
+    environment:
+      - PROXY_CORE_PORT=3001
+      - DB_PATH=/app/data/requests.db
+    volumes:
+      - ./data:/app/data
+      - ./config.yaml:/app/config.yaml:ro
+    networks:
+      - proxy-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  # proxy-data - Dashboard APIs and data processing
+  # Handles: /api/*, conversation indexing, statistics
+  # Frequently updated - can be redeployed independently
+  proxy-data:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.proxy-data
+    container_name: claude-proxy-data
+    restart: unless-stopped
+    expose:
+      - "3002"
+    environment:
+      - PROXY_DATA_PORT=3002
+      - DB_PATH=/app/data/requests.db
+    volumes:
+      - ./data:/app/data
+      - ./config.yaml:/app/config.yaml:ro
+      # Mount Claude projects directory for conversation indexing
+      - ~/.claude/projects:/root/.claude/projects:ro
+    networks:
+      - proxy-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Legacy web dashboard with Hot Module Reload (HMR)
+  web:
+    image: node:20-alpine
+    container_name: claude-proxy-web
+    working_dir: /app
+    command: sh -c "echo 524288 > /proc/sys/fs/inotify/max_user_watches 2>/dev/null || true && npm install -g pnpm && pnpm install && pnpm dev --host 0.0.0.0"
+    ports:
+      - "5173:5173"
+      - "24678:24678"  # Vite HMR websocket port
+    volumes:
+      - ./web:/app
+      - web_node_modules:/app/node_modules
+      - /proc/sys:/proc/sys  # Allow modifying inotify limits
+    environment:
+      - VITE_API_URL=http://localhost:3000
+      - VITE_HMR_HOST=localhost
+      - VITE_HMR_PORT=24678
+      - NODE_ENV=development
+    networks:
+      - proxy-network
+    stdin_open: true
+    tty: true
+    cap_add:
+      - SYS_ADMIN  # Allow sysctl modifications
+    depends_on:
+      caddy:
+        condition: service_healthy
+
+  # New dashboard with Hot Module Reload (HMR)
+  dashboard:
+    image: node:20-alpine
+    container_name: claude-proxy-dashboard
+    working_dir: /app
+    command: sh -c "echo 524288 > /proc/sys/fs/inotify/max_user_watches 2>/dev/null || true && npm install -g pnpm && pnpm install && pnpm dev --host 0.0.0.0 --port 5173"
+    ports:
+      - "5174:5173"
+      - "24679:24679"  # Vite HMR websocket port
+    volumes:
+      - ./dashboard:/app
+      - dashboard_node_modules:/app/node_modules
+      - /proc/sys:/proc/sys  # Allow modifying inotify limits
+    environment:
+      - VITE_API_URL=http://localhost:3000
+      - VITE_HMR_HOST=localhost
+      - VITE_HMR_PORT=24679
+      - NODE_ENV=development
+    networks:
+      - proxy-network
+    stdin_open: true
+    tty: true
+    cap_add:
+      - SYS_ADMIN  # Allow sysctl modifications
+    depends_on:
+      caddy:
+        condition: service_healthy
+
+networks:
+  proxy-network:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:
+  web_node_modules:
+  dashboard_node_modules:
