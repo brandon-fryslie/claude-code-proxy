@@ -22,6 +22,18 @@ providers:
       max_failures: 5
       timeout: "30s"
 
+  # Google Gemini via OpenAI-compatible API
+  # Get your API key from https://aistudio.google.com/apikey
+  gemini:
+    api_key: "${GEMINI_API_KEY}"
+    base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+    format: "openai" # required - Gemini uses OpenAI-compatible format
+    max_retries: 3
+    # Available models:
+    # - gemini-2.0-flash-exp  (fastest, experimental)
+    # - gemini-1.5-pro        (most capable)
+    # - gemini-1.5-flash      (balanced speed/capability)
+
   localllm:
     base_url: "localhost:1234"
     format: "openai" # required
@@ -34,6 +46,12 @@ subagents:
 
     # OpenAI routing
     code-reviewer: "openai:gpt-4o"
+
+    # Gemini routing - fast experimental model for code review
+    fast-reviewer: "gemini:gemini-2.0-flash-exp"
+
+    # Gemini routing - most capable model for complex tasks
+    architect: "gemini:gemini-1.5-pro"
 
     # Local LLM routing
     planner: "localllm:my-local-agent"
