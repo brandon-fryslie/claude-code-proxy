@@ -101,58 +101,61 @@ services:
       retries: 3
       start_period: 10s
 
-  # Legacy web dashboard with Hot Module Reload (HMR)
-  web:
-    image: node:20-alpine
-    container_name: claude-proxy-web
-    working_dir: /app
-    command: sh -c "echo 524288 > /proc/sys/fs/inotify/max_user_watches 2>/dev/null || true && npm install -g pnpm && pnpm install && pnpm dev --host 0.0.0.0"
-    ports:
-      - "5173:5173"
-      - "24678:24678"  # Vite HMR websocket port
-    volumes:
-      - ./web:/app
-      - web_node_modules:/app/node_modules
-      - /proc/sys:/proc/sys  # Allow modifying inotify limits
-    environment:
-      - VITE_API_URL=http://localhost:3000
-      - VITE_HMR_HOST=localhost
-      - VITE_HMR_PORT=24678
-      - NODE_ENV=development
-    networks:
-      - proxy-network
-    stdin_open: true
-    tty: true
-    cap_add:
-      - SYS_ADMIN  # Allow sysctl modifications
-    depends_on:
-      caddy:
-        condition: service_healthy
+  # Legacy web dashboard - DISABLED (use new dashboard on port 5173 instead)
+  # The Remix+Vite combo has persistent file watcher issues in containers.
+  # Uncomment if you need to work on the legacy dashboard.
+  # web:
+  #   image: node:20-alpine
+  #   container_name: claude-proxy-web
+  #   working_dir: /app
+  #   command: sh -c "npm install -g pnpm && pnpm install && pnpm dev --host 0.0.0.0"
+  #   ports:
+  #     - "5173:5173"
+  #     - "24678:24678"
+  #   volumes:
+  #     - ./web:/app
+  #     - web_node_modules:/app/node_modules
+  #     - web_pnpm_store:/app/.pnpm-store
+  #   environment:
+  #     - VITE_API_URL=http://localhost:3000
+  #     - VITE_HMR_HOST=localhost
+  #     - VITE_HMR_PORT=24678
+  #     - NODE_ENV=development
+  #     - CHOKIDAR_USEPOLLING=true
+  #     - NODE_OPTIONS=--max-old-space-size=2048
+  #   networks:
+  #     - proxy-network
+  #   stdin_open: true
+  #   tty: true
+  #   depends_on:
+  #     caddy:
+  #       condition: service_healthy
 
   # New dashboard with Hot Module Reload (HMR)
+  # This is the primary dashboard - runs on port 5173
   dashboard:
     image: node:20-alpine
     container_name: claude-proxy-dashboard
     working_dir: /app
-    command: sh -c "echo 524288 > /proc/sys/fs/inotify/max_user_watches 2>/dev/null || true && npm install -g pnpm && pnpm install && pnpm dev --host 0.0.0.0 --port 5173"
+    command: sh -c "npm install -g pnpm && pnpm install && pnpm dev --host 0.0.0.0 --port 5173"
     ports:
-      - "5174:5173"
+      - "5173:5173"  # Primary dashboard port
       - "24679:24679"  # Vite HMR websocket port
     volumes:
       - ./dashboard:/app
       - dashboard_node_modules:/app/node_modules
-      - /proc/sys:/proc/sys  # Allow modifying inotify limits
+      - dashboard_pnpm_store:/app/.pnpm-store  # Keep pnpm store in named volume, not host
     environment:
       - VITE_API_URL=http://localhost:3000
       - VITE_HMR_HOST=localhost
       - VITE_HMR_PORT=24679
       - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true  # Use polling instead of inotify to avoid watcher limits
+      - NODE_OPTIONS=--max-old-space-size=2048  # Increase heap size
     networks:
       - proxy-network
     stdin_open: true
     tty: true
-    cap_add:
-      - SYS_ADMIN  # Allow sysctl modifications
     depends_on:
       caddy:
         condition: service_healthy
@@ -165,4 +168,6 @@ volumes:
   caddy_data:
   caddy_config:
   web_node_modules:
+  web_pnpm_store:
   dashboard_node_modules:
+  dashboard_pnpm_store:
