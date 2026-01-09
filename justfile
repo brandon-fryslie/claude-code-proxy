@@ -24,8 +24,17 @@ run:
     ./run-split.sh
 
 # Run with podman (complete dev stack with HMR)
+# Uses cached images - run `just build-docker` if you changed Go code
 dev:
+    podman-compose up
+
+# Run with podman and rebuild images (use when Go code changes)
+dev-build:
     podman-compose up --build
+
+# Build docker images without starting
+build-docker:
+    podman-compose build
 
 # Stop podman services
 stop:
