@@ -146,7 +146,7 @@ services:
       - dashboard_node_modules:/app/node_modules
       - dashboard_pnpm_store:/app/.pnpm-store  # Keep pnpm store in named volume, not host
     environment:
-      - VITE_API_URL=http://localhost:3000
+      - VITE_API_URL=http://caddy:3000  # Use Docker network service name
       - VITE_HMR_HOST=localhost
       - VITE_HMR_PORT=24679
       - NODE_ENV=development
