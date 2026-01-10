@@ -146,8 +146,8 @@ export const CodeViewer: FC<CodeViewerProps> = ({
       )}
     >
       {showControls && (
-        <div className="px-4 py-2 bg-gray-800 border-b border-gray-700 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
+        <div className="px-3 py-1.5 bg-gray-800 border-b border-gray-700 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
             <FileCode className="w-4 h-4 text-blue-400" />
             <span className="text-sm text-gray-300 font-mono">
               {filename || 'Untitled'}
@@ -186,10 +186,10 @@ export const CodeViewer: FC<CodeViewerProps> = ({
           <tbody>
             {lines.map((line, idx) => (
               <tr key={idx} className="hover:bg-gray-800/50">
-                <td className="px-4 py-0.5 text-right text-gray-500 select-none w-12 align-top">
+                <td className="px-2 py-0.5 text-right text-gray-500 select-none w-10 align-top">
                   {idx + 1}
                 </td>
-                <td className="px-4 py-0.5 whitespace-pre text-gray-300">
+                <td className="px-2 py-0.5 whitespace-pre text-gray-300">
                   <span dangerouslySetInnerHTML={{ __html: highlightCode(line) }} />
                 </td>
               </tr>

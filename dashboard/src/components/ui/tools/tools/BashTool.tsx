@@ -20,13 +20,13 @@ export const BashTool: FC<{ input: Record<string, unknown> }> = ({ input }) => {
   } = input as BashToolInput;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {/* Description */}
       {description && <div className="text-sm text-gray-600 italic">{description}</div>}
 
       {/* Command display */}
       {command && (
-        <div className="font-mono text-sm bg-gray-900 text-gray-100 p-3 rounded-lg overflow-x-auto">
+        <div className="font-mono text-sm bg-gray-900 text-gray-100 p-2 rounded-lg overflow-x-auto">
           <div className="flex items-start gap-2">
             <span className="text-green-400 select-none">$</span>
             <span className="whitespace-pre-wrap break-all">{command}</span>

@@ -36,7 +36,7 @@ export const TodoWriteTool: FC<{ input: Record<string, unknown> }> = ({ input })
   const done = grouped.completed.length;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Summary */}
       <div className="flex items-center gap-3 text-sm">
         <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -122,7 +122,7 @@ const TodoItem: FC<{ todo: Todo }> = ({ todo }) => {
   };
 
   return (
-    <div className="flex items-start gap-2 py-1.5">
+    <div className="flex items-start gap-2 py-1">
       <Icon className={cn('w-4 h-4 mt-0.5 flex-shrink-0', config.iconClass)} />
       <div className="flex-1 min-w-0">
         <span className={cn('text-sm', config.textClass)}>

@@ -7,7 +7,7 @@ export const WriteTool: FC<{ input: Record<string, unknown> }> = ({ input }) => 
   const content = String(input.content || '');
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <div className="flex items-center gap-2 text-sm">
         <FilePlus className="w-4 h-4 text-green-500" />
         <span className="font-mono text-blue-600">{path}</span>

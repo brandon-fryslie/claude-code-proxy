@@ -20,7 +20,7 @@ export const ToolResultContent: FC<ToolResultContentProps> = ({ content, isError
   // Error content
   if (isError || analysis.type === 'error') {
     return (
-      <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+      <div className="flex items-start gap-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700">
         <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
           <div className="font-medium mb-1">Error</div>
@@ -67,7 +67,7 @@ export const ToolResultContent: FC<ToolResultContentProps> = ({ content, isError
   if (analysis.type === 'table') {
     return (
       <div className="overflow-x-auto">
-        <pre className="text-xs font-mono bg-gray-50 p-3 rounded border border-gray-200 whitespace-pre">
+        <pre className="text-xs font-mono bg-gray-50 p-2 rounded border border-gray-200 whitespace-pre">
           {content}
         </pre>
       </div>
@@ -76,7 +76,7 @@ export const ToolResultContent: FC<ToolResultContentProps> = ({ content, isError
 
   // Plain text (default)
   return (
-    <div className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 p-3 rounded border border-gray-200 max-h-96 overflow-y-auto">
+    <div className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 p-2 rounded border border-gray-200 max-h-96 overflow-y-auto">
       {content}
     </div>
   );

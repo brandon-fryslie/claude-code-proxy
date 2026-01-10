@@ -9,7 +9,7 @@ export const TaskTool: FC<{ input: Record<string, unknown> }> = ({ input }) => {
   const runInBackground = input.run_in_background as boolean | undefined;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {/* Agent type */}
       <div className="flex items-center gap-2">
         <Users className="w-4 h-4 text-indigo-500" />
@@ -36,7 +36,7 @@ export const TaskTool: FC<{ input: Record<string, unknown> }> = ({ input }) => {
             <FileText className="w-4 h-4 inline mr-1" />
             Show prompt ({prompt.length} chars)
           </summary>
-          <pre className="mt-2 p-3 bg-gray-50 rounded text-xs overflow-x-auto whitespace-pre-wrap">
+          <pre className="mt-2 p-2 bg-gray-50 rounded text-xs overflow-x-auto whitespace-pre-wrap">
             {prompt}
           </pre>
         </details>

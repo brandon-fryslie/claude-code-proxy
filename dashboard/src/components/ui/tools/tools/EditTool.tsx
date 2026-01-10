@@ -13,7 +13,7 @@ export const EditTool: FC<{ input: Record<string, unknown> }> = ({ input }) => {
   const { file_path, old_string, new_string, replace_all } = input as EditToolInput;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {/* File path */}
       {file_path && (
         <div className="flex items-center gap-2 text-sm">
@@ -55,7 +55,7 @@ const CodeDiff: FC<CodeDiffProps> = ({ oldCode, newCode }) => {
     <div className="grid grid-cols-2 gap-2">
       {/* Old code (deletions) */}
       <div className="rounded-lg overflow-hidden border border-red-200">
-        <div className="bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 border-b border-red-200">
+        <div className="bg-red-50 px-2 py-1 text-xs font-medium text-red-700 border-b border-red-200">
           Old
         </div>
         <div className="bg-gray-900 p-2 text-sm font-mono overflow-x-auto max-h-64">
@@ -76,7 +76,7 @@ const CodeDiff: FC<CodeDiffProps> = ({ oldCode, newCode }) => {
 
       {/* New code (additions) */}
       <div className="rounded-lg overflow-hidden border border-green-200">
-        <div className="bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700 border-b border-green-200">
+        <div className="bg-green-50 px-2 py-1 text-xs font-medium text-green-700 border-b border-green-200">
           New
         </div>
         <div className="bg-gray-900 p-2 text-sm font-mono overflow-x-auto max-h-64">

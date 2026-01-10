@@ -70,14 +70,14 @@ export const ToolUseContainer: FC<ToolUseContainerProps> = ({
 
       {/* Expandable content */}
       {expanded && (
-        <div className="px-4 py-3 border-t border-indigo-100 bg-white/60">
+        <div className="px-3 py-2 border-t border-indigo-100 bg-white/60">
           <ToolRenderer input={input} />
         </div>
       )}
 
       {/* Execution indicator footer */}
       {isExecuting && (
-        <div className="px-4 py-1.5 bg-indigo-100/50 text-xs text-indigo-600 flex items-center gap-2 border-t border-indigo-100">
+        <div className="px-3 py-1 bg-indigo-100/50 text-xs text-indigo-600 flex items-center gap-2 border-t border-indigo-100">
           <Loader2 className="w-3 h-3 animate-spin" />
           <span>Executing {name}...</span>
         </div>
@@ -98,12 +98,12 @@ const ToolHeader: FC<{
 
   return (
     <div
-      className="flex items-center justify-between px-4 py-2.5 cursor-pointer hover:bg-white/50 transition-colors group"
+      className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-white/50 transition-colors group"
       onClick={onToggle}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         {/* Tool icon */}
-        <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
+        <div className="w-6 h-6 rounded-lg bg-indigo-100 flex items-center justify-center">
           <Terminal className="w-4 h-4 text-indigo-600" />
         </div>
 
