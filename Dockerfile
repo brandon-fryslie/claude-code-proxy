@@ -65,8 +65,8 @@ COPY docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 
 # Environment variables with defaults
-ENV PORT=3001
-ENV WEB_PORT=5173
+ENV PORT=8001
+ENV WEB_PORT=8173
 ENV READ_TIMEOUT=600
 ENV WRITE_TIMEOUT=600
 ENV IDLE_TIMEOUT=600
@@ -76,14 +76,14 @@ ENV ANTHROPIC_MAX_RETRIES=3
 ENV DB_PATH=/app/data/requests.db
 
 # Expose ports
-EXPOSE 3001 5173
+EXPOSE 8001 8173
 
 # Switch to app user
 USER appuser
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget -qO- http://localhost:3001/health > /dev/null || exit 1
+    CMD wget -qO- http://localhost:8001/health > /dev/null || exit 1
 
 # Start both services
 CMD ["./docker-entrypoint.sh"]

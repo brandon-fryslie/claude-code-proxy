@@ -11,11 +11,11 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: 8173,
     proxy: {
       '/api': {
-        // In Docker: use caddy service name. Locally: use localhost:3000
-        target: process.env.VITE_API_URL || 'http://localhost:3000',
+        // In Docker: use caddy service name. Locally: use localhost:8000
+        target: process.env.VITE_API_URL || 'http://localhost:8000',
         changeOrigin: true,
       },
     },

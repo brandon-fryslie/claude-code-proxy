@@ -80,7 +80,7 @@ func main() {
 	// Get port from environment or config
 	port := os.Getenv("PROXY_CORE_PORT")
 	if port == "" {
-		port = "3001"
+		port = "8001"
 	}
 
 	srv := &http.Server{

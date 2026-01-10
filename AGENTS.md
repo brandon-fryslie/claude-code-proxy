@@ -5,9 +5,9 @@
 Claude Code Proxy - A transparent proxy for monitoring Claude Code API requests with optional routing to different LLM providers.
 
 **Architecture:** Split services for zero-downtime deployments
-- `proxy-core` (port 3001) - Lightweight API proxy, rarely changes
-- `proxy-data` (port 3002) - Dashboard APIs, stats, indexing
-- Caddy (port 3000) - Reverse proxy routing
+- `proxy-core` (port 8001) - Lightweight API proxy, rarely changes
+- `proxy-data` (port 8002) - Dashboard APIs, stats, indexing
+- Caddy (port 8000) - Reverse proxy routing
 
 ## Workflow Commands
 

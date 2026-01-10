@@ -9,7 +9,7 @@ export const loader: LoaderFunction = async ({ request }) => {
     const limit = url.searchParams.get("limit");
 
     // Forward the request to the Go backend
-    const backendUrl = new URL('http://localhost:3001/api/requests');
+    const backendUrl = new URL('http://localhost:8000/api/requests');
     if (modelFilter) {
       backendUrl.searchParams.append('model', modelFilter);
     }
@@ -42,7 +42,7 @@ export const action: ActionFunction = async ({ request }) => {
   if (method === "DELETE") {
     try {
       // Forward the DELETE request to the Go backend
-      const response = await fetch('http://localhost:3001/api/requests', {
+      const response = await fetch('http://localhost:8000/api/requests', {
         method: 'DELETE'
       });
       

@@ -10,7 +10,7 @@ export const action: ActionFunction = async ({ request }) => {
     const body = await request.json();
     
     // Forward the request to the Go backend
-    const response = await fetch('http://localhost:3001/api/grade-prompt', {
+    const response = await fetch('http://localhost:8000/api/grade-prompt', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

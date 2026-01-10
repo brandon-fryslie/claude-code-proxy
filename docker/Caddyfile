@@ -12,7 +12,7 @@
 	admin off  # Disable admin API in production
 }
 
-:3000 {
+:8000 {
 	# Enable gzip compression
 	encode gzip
 
@@ -24,12 +24,12 @@
 
 	# Health check - route to proxy-core
 	handle /health {
-		reverse_proxy proxy-core:3001
+		reverse_proxy proxy-core:8001
 	}
 
 	# Proxy API routes - route to proxy-core
 	handle /v1/* {
-		reverse_proxy proxy-core:3001 {
+		reverse_proxy proxy-core:8001 {
 			# Enable streaming for SSE responses
 			flush_interval -1
 		}
@@ -37,17 +37,17 @@
 
 	# Dashboard API routes - route to proxy-data
 	handle /api/* {
-		reverse_proxy proxy-data:3002
+		reverse_proxy proxy-data:8002
 	}
 
 	# UI routes - route to proxy-data
 	handle /ui {
-		reverse_proxy proxy-data:3002
+		reverse_proxy proxy-data:8002
 	}
 
 	# Root path - route to proxy-data for UI
 	handle / {
-		reverse_proxy proxy-data:3002
+		reverse_proxy proxy-data:8002
 	}
 
 	# Fallback - 404 for unmatched routes

@@ -6,7 +6,7 @@ export const loader: LoaderFunction = async ({ request }) => {
     const url = new URL(request.url);
     const modelFilter = url.searchParams.get("model");
 
-    const backendUrl = new URL('http://localhost:3001/api/conversations');
+    const backendUrl = new URL('http://localhost:8000/api/conversations');
     if (modelFilter) {
       backendUrl.searchParams.append('model', modelFilter);
     }

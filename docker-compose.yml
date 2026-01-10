@@ -14,9 +14,8 @@
 # Or use: just dev, just stop, just restart-data
 #
 # Access:
-#   API Proxy:        http://localhost:3000
-#   Web Dashboard:    http://localhost:5173
-#   Dashboard:        http://localhost:5174
+#   API Proxy:        http://localhost:8000
+#   Web Dashboard:    http://localhost:8173
 
 version: '3.8'
 
@@ -28,7 +27,7 @@ services:
     container_name: claude-proxy-caddy
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "8000:8000"
     volumes:
       - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -41,7 +40,7 @@ services:
     networks:
       - proxy-network
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -57,9 +56,9 @@ services:
     container_name: claude-proxy-core
     restart: unless-stopped
     expose:
-      - "3001"
+      - "8001"
     environment:
-      - PROXY_CORE_PORT=3001
+      - PROXY_CORE_PORT=8001
       - DB_PATH=/app/data/requests.db
     volumes:
       - ./data:/app/data
@@ -67,7 +66,7 @@ services:
     networks:
       - proxy-network
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8001/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -83,19 +82,19 @@ services:
     container_name: claude-proxy-data
     restart: unless-stopped
     expose:
-      - "3002"
+      - "8002"
     environment:
-      - PROXY_DATA_PORT=3002
+      - PROXY_DATA_PORT=8002
       - DB_PATH=/app/data/requests.db
     volumes:
       - ./data:/app/data
       - ./config.yaml:/app/config.yaml:ro
       # Mount Claude projects directory for conversation indexing
-      - ~/.claude/projects:/root/.claude/projects:ro
+      - ~/.claude/projects:/home/appuser/.claude/projects:ro
     networks:
       - proxy-network
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3002/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8002/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -110,14 +109,14 @@ services:
   #   working_dir: /app
   #   command: sh -c "npm install -g pnpm && pnpm install && pnpm dev --host 0.0.0.0"
   #   ports:
-  #     - "5173:5173"
+  #     - "8174:8174"
   #     - "24678:24678"
   #   volumes:
   #     - ./web:/app
   #     - web_node_modules:/app/node_modules
   #     - web_pnpm_store:/app/.pnpm-store
   #   environment:
-  #     - VITE_API_URL=http://localhost:3000
+  #     - VITE_API_URL=http://localhost:8000
   #     - VITE_HMR_HOST=localhost
   #     - VITE_HMR_PORT=24678
   #     - NODE_ENV=development
@@ -137,16 +136,16 @@ services:
     image: node:20-alpine
     container_name: claude-proxy-dashboard
     working_dir: /app
-    command: sh -c "npm install -g pnpm && pnpm install && pnpm dev --host 0.0.0.0 --port 5173"
+    command: sh -c "npm install -g pnpm && pnpm install && pnpm dev --host 0.0.0.0 --port 8173"
     ports:
-      - "5173:5173"  # Primary dashboard port
+      - "8173:8173"  # Primary dashboard port
       - "24679:24679"  # Vite HMR websocket port
     volumes:
       - ./dashboard:/app
       - dashboard_node_modules:/app/node_modules
       - dashboard_pnpm_store:/app/.pnpm-store  # Keep pnpm store in named volume, not host
     environment:
-      - VITE_API_URL=http://caddy:3000  # Use Docker network service name
+      - VITE_API_URL=http://caddy:8000  # Use Docker network service name
       - VITE_HMR_HOST=localhost
       - VITE_HMR_PORT=24679
       - NODE_ENV=development

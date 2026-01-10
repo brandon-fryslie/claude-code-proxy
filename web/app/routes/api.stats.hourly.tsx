@@ -1,7 +1,7 @@
 import { json } from "@remix-run/node";
 import type { LoaderFunctionArgs } from "@remix-run/node";
 
-const PROXY_URL = process.env.PROXY_URL || "http://localhost:3001";
+const PROXY_URL = process.env.PROXY_URL || "http://localhost:8000";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);

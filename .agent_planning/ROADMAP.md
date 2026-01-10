@@ -136,6 +136,18 @@
   - Add clear all requests button
   - Settings for auto-refresh
 
+- **request-detail-headers** [PROPOSED]
+  - Request detail view missing headers and metadata
+  - Show request/response headers
+  - Display timing info, status codes
+  - Add copy buttons for header values
+
+- **tool-use-compact-display** [PROPOSED]
+  - Tool use blocks are space-inefficient
+  - Tighten up layout while keeping good aesthetics
+  - More compact parameter display
+  - Better use of horizontal space
+
 - **multi-provider-comparison** [PROPOSED]
   - Send same prompt to multiple providers simultaneously
   - Side-by-side response comparison view

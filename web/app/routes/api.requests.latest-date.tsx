@@ -1,7 +1,7 @@
 import type { LoaderFunctionArgs } from "@remix-run/node";
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const apiUrl = process.env.API_URL || "http://localhost:3001";
+  const apiUrl = process.env.API_URL || "http://localhost:8000";
 
   const response = await fetch(`${apiUrl}/api/requests/latest-date`);
 

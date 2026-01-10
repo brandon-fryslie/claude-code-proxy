@@ -43,18 +43,18 @@ RUN mkdir -p /app/data && chown -R appuser:appgroup /app
 COPY config.yaml* ./
 
 # Environment variables with defaults
-ENV PROXY_CORE_PORT=3001
+ENV PROXY_CORE_PORT=8001
 ENV DB_PATH=/app/data/requests.db
 
 # Expose port
-EXPOSE 3001
+EXPOSE 8001
 
 # Switch to app user
 USER appuser
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget -qO- http://localhost:3001/health > /dev/null || exit 1
+    CMD wget -qO- http://localhost:8001/health > /dev/null || exit 1
 
 # Run proxy-core
 CMD ["./bin/proxy-core"]

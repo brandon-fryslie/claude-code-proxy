@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Claude Code Monitor - Split Architecture Run Script
-# Runs: Caddy (port 3000) + proxy-core (port 3001) + proxy-data (port 3002) + web dashboards
+# Runs: Caddy (port 8000) + proxy-core (port 8001) + proxy-data (port 8002) + web dashboards
 
 set -e
 
@@ -122,7 +122,7 @@ CADDY_PID=$!
 sleep 1
 
 # Start proxy-core
-echo -e "${BLUE}Starting proxy-core (port 3001)...${NC}"
+echo -e "${BLUE}Starting proxy-core (port 8001)...${NC}"
 ./bin/proxy-core > "$LOGDIR/proxy-core.log" 2>&1 &
 PROXY_CORE_PID=$!
 
@@ -130,7 +130,7 @@ PROXY_CORE_PID=$!
 sleep 2
 
 # Start proxy-data
-echo -e "${BLUE}Starting proxy-data (port 3002)...${NC}"
+echo -e "${BLUE}Starting proxy-data (port 8002)...${NC}"
 ./bin/proxy-data > "$LOGDIR/proxy-data.log" 2>&1 &
 PROXY_DATA_PID=$!
 
@@ -160,17 +160,17 @@ echo -e "\n${GREEN}All services started!${NC}"
 echo "========================================="
 echo -e "Architecture:     ${YELLOW}Split Services${NC}"
 echo ""
-echo -e "Unified Proxy:    ${BLUE}http://localhost:3000${NC} (Caddy)"
-echo -e "  -> /v1/*        ${BLUE}http://localhost:3001${NC} (proxy-core)"
-echo -e "  -> /api/*       ${BLUE}http://localhost:3002${NC} (proxy-data)"
+echo -e "Unified Proxy:    ${BLUE}http://localhost:8000${NC} (Caddy)"
+echo -e "  -> /v1/*        ${BLUE}http://localhost:8001${NC} (proxy-core)"
+echo -e "  -> /api/*       ${BLUE}http://localhost:8002${NC} (proxy-data)"
 echo ""
 echo -e "Web Dashboard:    ${BLUE}${WEB_URL}${NC}"
 echo -e "New Dashboard:    ${BLUE}${DASHBOARD_URL}${NC}"
 echo ""
 echo -e "Health Checks:"
-echo -e "  Caddy:          ${BLUE}http://localhost:3000/health${NC}"
-echo -e "  proxy-core:     ${BLUE}http://localhost:3001/health${NC}"
-echo -e "  proxy-data:     ${BLUE}http://localhost:3002/health${NC}"
+echo -e "  Caddy:          ${BLUE}http://localhost:8000/health${NC}"
+echo -e "  proxy-core:     ${BLUE}http://localhost:8001/health${NC}"
+echo -e "  proxy-data:     ${BLUE}http://localhost:8002/health${NC}"
 echo "========================================="
 echo -e "${YELLOW}Press Ctrl+C to stop all services${NC}\n"
 

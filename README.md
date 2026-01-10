@@ -67,7 +67,7 @@ Claude Code Proxy serves three main purposes:
 
 To use this proxy with Claude Code, set:
 ```bash
-export ANTHROPIC_BASE_URL=http://localhost:3001
+export ANTHROPIC_BASE_URL=http://localhost:8001
 ```
 
 Then launch Claude Code using the `claude` command.
@@ -75,9 +75,9 @@ Then launch Claude Code using the `claude` command.
 This will route Claude Code's requests through the proxy for monitoring.
 
 ### Access Points
-- **Web Dashboard**: http://localhost:5173
-- **API Proxy**: http://localhost:3001
-- **Health Check**: http://localhost:3001/health
+- **Web Dashboard**: http://localhost:8173
+- **API Proxy**: http://localhost:8001
+- **Health Check**: http://localhost:8001/health
 
 ## Commands
 
@@ -100,15 +100,14 @@ just clean         # Clean all build artifacts and Docker resources
 
 The proxy runs as multiple services for zero-downtime deployments:
 
-- **proxy-core** (port 3001): Lightweight API proxy. Rarely changes.
-- **proxy-data** (port 3002): Dashboard APIs, statistics, indexing. Updated frequently.
+- **proxy-core** (port 8001): Lightweight API proxy. Rarely changes.
+- **proxy-data** (port 8002): Dashboard APIs, statistics, indexing. Updated frequently.
 
-Caddy (port 3000) routes requests to the appropriate service.
+Caddy (port 8000) routes requests to the appropriate service.
 
 **Access Points:**
-- **API**: http://localhost:3000 (unified) or http://localhost:3001 (direct)
-- **Web Dashboard**: http://localhost:5173
-- **New Dashboard**: http://localhost:5174
+- **API**: http://localhost:8000 (unified) or http://localhost:8001 (direct)
+- **Web Dashboard**: http://localhost:8173
 
 ## Configuration
 
@@ -117,7 +116,7 @@ Caddy (port 3000) routes requests to the appropriate service.
 Create a `config.yaml` file (or copy from `config.yaml.example`):
 ```yaml
 server:
-  port: 3001
+  port: 8001
 
 providers:
   anthropic:
@@ -193,8 +192,8 @@ All environment variables can be configured when running the Docker container:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `3001` | Proxy server port |
-| `WEB_PORT` | `5173` | Web dashboard port |
+| `PORT` | `8001` | Proxy server port |
+| `WEB_PORT` | `8173` | Web dashboard port |
 | `READ_TIMEOUT` | `600` | Server read timeout (seconds) |
 | `WRITE_TIMEOUT` | `600` | Server write timeout (seconds) |
 | `IDLE_TIMEOUT` | `600` | Server idle timeout (seconds) |
@@ -205,7 +204,7 @@ All environment variables can be configured when running the Docker container:
 
 Example with custom configuration:
 ```bash
-docker run -p 3001:3001 -p 5173:5173 \
+docker run -p 8001:8001 -p 8173:8173 \
   -v ./data:/app/data \
   -e PORT=8080 \
   -e WEB_PORT=3000 \
