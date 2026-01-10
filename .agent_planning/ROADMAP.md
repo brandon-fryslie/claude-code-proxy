@@ -142,11 +142,11 @@
   - Display timing info, status codes
   - Add copy buttons for header values
 
-- **tool-use-compact-display** [PROPOSED]
-  - Tool use blocks are space-inefficient
-  - Tighten up layout while keeping good aesthetics
-  - More compact parameter display
-  - Better use of horizontal space
+- **tool-use-compact-display** [COMPLETED]
+  - ✅ Reduced padding in CodeViewer (biggest impact)
+  - ✅ Tightened ToolUseContainer spacing
+  - ✅ Compacted ToolResultContent layout
+  - ✅ Updated all specialized tools (Bash, Edit, Task, TodoWrite, Write)
 
 - **multi-provider-comparison** [PROPOSED]
   - Send same prompt to multiple providers simultaneously
