@@ -117,3 +117,30 @@ export async function assertAPIHealthy(page: Page) {
   const response = await page.request.get('/health');
   expect(response.ok()).toBeTruthy();
 }
+
+/**
+ * Wait for conversations to load and verify data is displayed.
+ * This ensures the API actually returns data, not just that the DOM loaded.
+ *
+ * @param page - Playwright Page object
+ * @param minConversations - Minimum number of conversations expected (default: 1)
+ */
+export async function waitForConversationsLoad(page: Page, minConversations = 1) {
+  // Wait for API response
+  await waitForAPIResponse(page, '/api/v2/conversations');
+
+  // Wait for DOM to be ready
+  await page.waitForLoadState('domcontentloaded');
+
+  // Verify conversation count is displayed
+  const countText = page.locator('text=/\\d+ conversation/');
+  await expect(countText).toBeVisible({ timeout: 5000 });
+
+  // If we expect conversations, verify at least one conversation button exists
+  if (minConversations > 0) {
+    const conversationButtons = page.locator('main button').filter({
+      hasText: /.ago$/ // Conversations end with "Xm ago", "Xh ago", etc.
+    });
+    await expect(conversationButtons.first()).toBeVisible({ timeout: 5000 });
+  }
+}

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { waitForConversationsLoad } from './helpers';
 
 test.describe('Accessibility', () => {
   const pages = [
@@ -14,7 +15,13 @@ test.describe('Accessibility', () => {
   for (const { name, path } of pages) {
     test(`${name} page should have proper heading structure`, async ({ page }) => {
       await page.goto(path);
-      await page.waitForLoadState('domcontentloaded');
+
+      // For Conversations page, wait for data to load
+      if (name === 'Conversations') {
+        await waitForConversationsLoad(page);
+      } else {
+        await page.waitForLoadState('domcontentloaded');
+      }
 
       // Should have at least one heading
       const headings = page.locator('h1, h2, h3, h4, h5, h6');
@@ -26,7 +33,13 @@ test.describe('Accessibility', () => {
 
     test(`${name} page should be keyboard navigable`, async ({ page }) => {
       await page.goto(path);
-      await page.waitForLoadState('domcontentloaded');
+
+      // For Conversations page, wait for data to load
+      if (name === 'Conversations') {
+        await waitForConversationsLoad(page);
+      } else {
+        await page.waitForLoadState('domcontentloaded');
+      }
 
       // Tab through interactive elements
       await page.keyboard.press('Tab');
