@@ -74,6 +74,7 @@ export function Sidebar({ activeItem, onItemSelect }: SidebarProps) {
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           className={cn(
             'p-1.5 rounded hover:bg-[var(--color-bg-hover)]',
             'text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]',
