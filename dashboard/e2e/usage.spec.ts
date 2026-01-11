@@ -56,11 +56,6 @@ test.describe('Usage Page', () => {
   test('should display model breakdown if available', async ({ page }) => {
     await page.waitForLoadState('domcontentloaded');
 
-    // Usage page might show breakdown by model
-    const modelSection = page.locator('[data-testid="model-breakdown"]').or(
-      page.getByText(/model|breakdown/i).first()
-    );
-
     // This is optional - just verify page doesn't crash
     const mainContent = page.locator('main');
     await expect(mainContent).toBeVisible();
