@@ -565,17 +565,19 @@ func (s *SQLiteStorageService) GetAllRequests(modelFilter string) ([]*model.Requ
 	return requests, nil
 }
 
-// GetRequestsSummary returns minimal data for list view - no body/headers, only usage from response
+// GetRequestsSummary returns minimal data for list view - uses indexed columns, no JSON parsing
 func (s *SQLiteStorageService) GetRequestsSummary(modelFilter string) ([]*model.RequestSummary, error) {
 	query := `
-		SELECT id, timestamp, method, endpoint, model, original_model, routed_model, response
+		SELECT id, timestamp, method, endpoint, model, original_model, routed_model,
+			   provider, subagent_name, tool_call_count, response_time_ms, first_byte_time_ms,
+			   input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens
 		FROM requests
 	`
 	args := []interface{}{}
 
 	if modelFilter != "" && modelFilter != "all" {
-		query += " WHERE LOWER(model) LIKE ?"
-		args = append(args, "%"+strings.ToLower(modelFilter)+"%")
+		query += " WHERE model LIKE ?"
+		args = append(args, "%"+modelFilter+"%")
 	}
 
 	query += " ORDER BY timestamp DESC"
@@ -588,49 +590,67 @@ func (s *SQLiteStorageService) GetRequestsSummary(modelFilter string) ([]*model.
 
 	var summaries []*model.RequestSummary
 	for rows.Next() {
-		var s model.RequestSummary
-		var responseJSON sql.NullString
+		var sum model.RequestSummary
+		var provider, subagentName sql.NullString
+		var toolCallCount sql.NullInt64
+		var responseTimeMs, firstByteTimeMs sql.NullInt64
+		var inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens sql.NullInt64
 
 		err := rows.Scan(
-			&s.RequestID,
-			&s.Timestamp,
-			&s.Method,
-			&s.Endpoint,
-			&s.Model,
-			&s.OriginalModel,
-			&s.RoutedModel,
-			&responseJSON,
+			&sum.RequestID,
+			&sum.Timestamp,
+			&sum.Method,
+			&sum.Endpoint,
+			&sum.Model,
+			&sum.OriginalModel,
+			&sum.RoutedModel,
+			&provider,
+			&subagentName,
+			&toolCallCount,
+			&responseTimeMs,
+			&firstByteTimeMs,
+			&inputTokens,
+			&outputTokens,
+			&cacheReadTokens,
+			&cacheCreationTokens,
 		)
 		if err != nil {
 			continue
 		}
 
-		// Only parse response to extract usage and status
-		if responseJSON.Valid {
-			var resp model.ResponseLog
-			if err := json.Unmarshal([]byte(responseJSON.String), &resp); err == nil {
-				s.StatusCode = resp.StatusCode
-				s.ResponseTime = resp.ResponseTime
+		if provider.Valid {
+			sum.Provider = provider.String
+		}
+		if subagentName.Valid {
+			sum.SubagentName = subagentName.String
+		}
+		if toolCallCount.Valid {
+			sum.ToolCallCount = int(toolCallCount.Int64)
+		}
+		if responseTimeMs.Valid {
+			sum.ResponseTime = responseTimeMs.Int64
+		}
+		if firstByteTimeMs.Valid {
+			sum.FirstByteTime = firstByteTimeMs.Int64
+		}
 
-				// Extract usage from response body
-				if resp.Body != nil {
-					var respBody struct {
-						Usage *model.AnthropicUsage `json:"usage"`
-					}
-					if err := json.Unmarshal(resp.Body, &respBody); err == nil && respBody.Usage != nil {
-						s.Usage = respBody.Usage
-					}
-				}
+		// Build usage from indexed columns
+		if inputTokens.Valid || outputTokens.Valid {
+			sum.Usage = &model.AnthropicUsage{
+				InputTokens:             int(inputTokens.Int64),
+				OutputTokens:            int(outputTokens.Int64),
+				CacheReadInputTokens:    int(cacheReadTokens.Int64),
+				CacheCreationInputTokens: int(cacheCreationTokens.Int64),
 			}
 		}
 
-		summaries = append(summaries, &s)
+		summaries = append(summaries, &sum)
 	}
 
 	return summaries, nil
 }
 
-// GetRequestsSummaryPaginated returns minimal data for list view with pagination - super fast!
+// GetRequestsSummaryPaginated returns minimal data for list view with pagination - uses indexed columns
 func (s *SQLiteStorageService) GetRequestsSummaryPaginated(modelFilter, startTime, endTime string, offset, limit int) ([]*model.RequestSummary, int, error) {
 	// First get total count
 	countQuery := "SELECT COUNT(*) FROM requests"
@@ -638,12 +658,12 @@ func (s *SQLiteStorageService) GetRequestsSummaryPaginated(modelFilter, startTim
 	whereClauses := []string{}
 
 	if modelFilter != "" && modelFilter != "all" {
-		whereClauses = append(whereClauses, "LOWER(model) LIKE ?")
-		countArgs = append(countArgs, "%"+strings.ToLower(modelFilter)+"%")
+		whereClauses = append(whereClauses, "model LIKE ?")
+		countArgs = append(countArgs, "%"+modelFilter+"%")
 	}
 
 	if startTime != "" && endTime != "" {
-		whereClauses = append(whereClauses, "datetime(timestamp) >= datetime(?) AND datetime(timestamp) <= datetime(?)")
+		whereClauses = append(whereClauses, "timestamp >= ? AND timestamp < ?")
 		countArgs = append(countArgs, startTime, endTime)
 	}
 
@@ -656,21 +676,23 @@ func (s *SQLiteStorageService) GetRequestsSummaryPaginated(modelFilter, startTim
 		return nil, 0, fmt.Errorf("failed to get total count: %w", err)
 	}
 
-	// Then get the requested page
+	// Then get the requested page - no response JSON needed
 	query := `
-		SELECT id, timestamp, method, endpoint, model, original_model, routed_model, response
+		SELECT id, timestamp, method, endpoint, model, original_model, routed_model,
+			   provider, subagent_name, tool_call_count, response_time_ms, first_byte_time_ms,
+			   input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens
 		FROM requests
 	`
 	args := []interface{}{}
 	queryWhereClauses := []string{}
 
 	if modelFilter != "" && modelFilter != "all" {
-		queryWhereClauses = append(queryWhereClauses, "LOWER(model) LIKE ?")
-		args = append(args, "%"+strings.ToLower(modelFilter)+"%")
+		queryWhereClauses = append(queryWhereClauses, "model LIKE ?")
+		args = append(args, "%"+modelFilter+"%")
 	}
 
 	if startTime != "" && endTime != "" {
-		queryWhereClauses = append(queryWhereClauses, "datetime(timestamp) >= datetime(?) AND datetime(timestamp) <= datetime(?)")
+		queryWhereClauses = append(queryWhereClauses, "timestamp >= ? AND timestamp < ?")
 		args = append(args, startTime, endTime)
 	}
 
@@ -697,61 +719,83 @@ func (s *SQLiteStorageService) GetRequestsSummaryPaginated(modelFilter, startTim
 
 	var summaries []*model.RequestSummary
 	for rows.Next() {
-		var s model.RequestSummary
-		var responseJSON sql.NullString
+		var sum model.RequestSummary
+		var provider, subagentName sql.NullString
+		var toolCallCount sql.NullInt64
+		var responseTimeMs, firstByteTimeMs sql.NullInt64
+		var inputTokens, outputTokens, cacheReadTokens, cacheCreationTokens sql.NullInt64
 
 		err := rows.Scan(
-			&s.RequestID,
-			&s.Timestamp,
-			&s.Method,
-			&s.Endpoint,
-			&s.Model,
-			&s.OriginalModel,
-			&s.RoutedModel,
-			&responseJSON,
+			&sum.RequestID,
+			&sum.Timestamp,
+			&sum.Method,
+			&sum.Endpoint,
+			&sum.Model,
+			&sum.OriginalModel,
+			&sum.RoutedModel,
+			&provider,
+			&subagentName,
+			&toolCallCount,
+			&responseTimeMs,
+			&firstByteTimeMs,
+			&inputTokens,
+			&outputTokens,
+			&cacheReadTokens,
+			&cacheCreationTokens,
 		)
 		if err != nil {
 			continue
 		}
 
-		// Only parse response to extract usage and status
-		if responseJSON.Valid {
-			var resp model.ResponseLog
-			if err := json.Unmarshal([]byte(responseJSON.String), &resp); err == nil {
-				s.StatusCode = resp.StatusCode
-				s.ResponseTime = resp.ResponseTime
+		if provider.Valid {
+			sum.Provider = provider.String
+		}
+		if subagentName.Valid {
+			sum.SubagentName = subagentName.String
+		}
+		if toolCallCount.Valid {
+			sum.ToolCallCount = int(toolCallCount.Int64)
+		}
+		if responseTimeMs.Valid {
+			sum.ResponseTime = responseTimeMs.Int64
+		}
+		if firstByteTimeMs.Valid {
+			sum.FirstByteTime = firstByteTimeMs.Int64
+		}
 
-				// Extract usage from response body
-				if resp.Body != nil {
-					var respBody struct {
-						Usage *model.AnthropicUsage `json:"usage"`
-					}
-					if err := json.Unmarshal(resp.Body, &respBody); err == nil && respBody.Usage != nil {
-						s.Usage = respBody.Usage
-					}
-				}
+		// Build usage from indexed columns
+		if inputTokens.Valid || outputTokens.Valid {
+			sum.Usage = &model.AnthropicUsage{
+				InputTokens:             int(inputTokens.Int64),
+				OutputTokens:            int(outputTokens.Int64),
+				CacheReadInputTokens:    int(cacheReadTokens.Int64),
+				CacheCreationInputTokens: int(cacheCreationTokens.Int64),
 			}
 		}
 
-		summaries = append(summaries, &s)
+		summaries = append(summaries, &sum)
 	}
 
-	log.Printf("📊 GetRequestsSummaryPaginated: returned %d requests (total: %d, limit: %d, offset: %d)", len(summaries), total, limit, offset)
 	return summaries, total, nil
 }
 
-// GetStats returns aggregated statistics for the dashboard - lightning fast!
+// GetStats returns aggregated statistics for the dashboard - uses SQL aggregation
 func (s *SQLiteStorageService) GetStats(startDate, endDate string) (*model.DashboardStats, error) {
 	stats := &model.DashboardStats{
 		DailyStats: make([]model.DailyTokens, 0),
 	}
 
-	// Query each request individually to process all responses
+	// SQL aggregation - no JSON parsing needed
 	query := `
-		SELECT timestamp, COALESCE(model, 'unknown') as model, response
+		SELECT
+			DATE(timestamp) as date,
+			COALESCE(model, 'unknown') as model,
+			COUNT(*) as requests,
+			SUM(COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0) + COALESCE(cache_read_tokens, 0) + COALESCE(cache_creation_tokens, 0)) as tokens
 		FROM requests
-		WHERE datetime(timestamp) >= datetime(?) AND datetime(timestamp) <= datetime(?)
-		ORDER BY timestamp
+		WHERE timestamp >= ? AND timestamp < ?
+		GROUP BY date, model
+		ORDER BY date
 	`
 
 	rows, err := s.db.Query(query, startDate, endDate)
@@ -760,79 +804,41 @@ func (s *SQLiteStorageService) GetStats(startDate, endDate string) (*model.Dashb
 	}
 	defer rows.Close()
 
-	// Aggregate data in memory
+	// Aggregate by date (models already grouped by SQL)
 	dailyMap := make(map[string]*model.DailyTokens)
 
 	for rows.Next() {
-		var timestamp, modelName, responseJSON string
+		var date, modelName string
+		var requests int
+		var tokens int64
 
-		if err := rows.Scan(&timestamp, &modelName, &responseJSON); err != nil {
+		if err := rows.Scan(&date, &modelName, &requests, &tokens); err != nil {
 			continue
 		}
 
-		// Extract date from timestamp (format: 2025-11-28T13:03:29-08:00)
-		date := strings.Split(timestamp, "T")[0]
-
-		// Parse response to get usage
-		var resp model.ResponseLog
-		if err := json.Unmarshal([]byte(responseJSON), &resp); err != nil {
-			continue
-		}
-
-		var usage *model.AnthropicUsage
-		if resp.Body != nil {
-			var respBody struct {
-				Usage *model.AnthropicUsage `json:"usage"`
-			}
-			if err := json.Unmarshal(resp.Body, &respBody); err == nil {
-				usage = respBody.Usage
-			}
-		}
-
-		tokens := int64(0)
-		if usage != nil {
-			tokens = int64(
-				usage.InputTokens +
-					usage.OutputTokens +
-					usage.CacheReadInputTokens +
-					usage.CacheCreationInputTokens)
-		}
-
-		// Daily aggregation
 		if daily, ok := dailyMap[date]; ok {
 			daily.Tokens += tokens
-			daily.Requests++
-			// Update per-model stats
-			if daily.Models == nil {
-				daily.Models = make(map[string]model.ModelStats)
-			}
-			if modelStat, ok := daily.Models[modelName]; ok {
-				modelStat.Tokens += tokens
-				modelStat.Requests++
-				daily.Models[modelName] = modelStat
-			} else {
-				daily.Models[modelName] = model.ModelStats{
-					Tokens:   tokens,
-					Requests: 1,
-				}
+			daily.Requests += requests
+			daily.Models[modelName] = model.ModelStats{
+				Tokens:   tokens,
+				Requests: requests,
 			}
 		} else {
 			dailyMap[date] = &model.DailyTokens{
 				Date:     date,
 				Tokens:   tokens,
-				Requests: 1,
+				Requests: requests,
 				Models: map[string]model.ModelStats{
 					modelName: {
 						Tokens:   tokens,
-						Requests: 1,
+						Requests: requests,
 					},
 				},
 			}
 		}
-
 	}
 
-	// Convert maps to slices
+	// Convert map to slice
 	for _, v := range dailyMap {
 		stats.DailyStats = append(stats.DailyStats, *v)
 	}
@@ -840,13 +846,21 @@ func (s *SQLiteStorageService) GetStats(startDate, endDate string) (*model.Dashb
 	return stats, nil
 }
 
-// GetHourlyStats returns hourly breakdown for a specific time range
+// GetHourlyStats returns hourly breakdown for a specific time range - uses SQL aggregation
 func (s *SQLiteStorageService) GetHourlyStats(startTime, endTime string) (*model.HourlyStatsResponse, error) {
+	// SQL aggregation - no JSON parsing needed
 	query := `
-		SELECT timestamp, COALESCE(model, 'unknown') as model, response
+		SELECT
+			CAST(strftime('%H', timestamp) AS INTEGER) as hour,
+			COALESCE(model, 'unknown') as model,
+			COUNT(*) as requests,
+			SUM(COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0) + COALESCE(cache_read_tokens, 0) + COALESCE(cache_creation_tokens, 0)) as tokens,
+			SUM(COALESCE(response_time_ms, 0)) as total_response_time,
+			SUM(CASE WHEN response_time_ms > 0 THEN 1 ELSE 0 END) as response_count
 		FROM requests
-		WHERE datetime(timestamp) >= datetime(?) AND datetime(timestamp) <= datetime(?)
-		ORDER BY timestamp
+		WHERE timestamp >= ? AND timestamp < ?
+		GROUP BY hour, model
+		ORDER BY hour
 	`
 
 	rows, err := s.db.Query(query, startTime, endTime)
@@ -862,84 +876,39 @@ func (s *SQLiteStorageService) GetHourlyStats(startTime, endTime string) (*model
 	var responseCount int
 
 	for rows.Next() {
-		var timestamp, modelName, responseJSON string
+		var hour, requests, rowResponseCount int
+		var modelName string
+		var tokens, rowResponseTime int64
 
-		if err := rows.Scan(&timestamp, &modelName, &responseJSON); err != nil {
+		if err := rows.Scan(&hour, &modelName, &requests, &tokens, &rowResponseTime, &rowResponseCount); err != nil {
 			continue
-		}
-
-		// Extract hour from timestamp
-		hour := 0
-		if t, err := time.Parse(time.RFC3339, timestamp); err == nil {
-			hour = t.Hour()
-		}
-
-		// Parse response to get usage and response time
-		var resp model.ResponseLog
-		if err := json.Unmarshal([]byte(responseJSON), &resp); err != nil {
-			continue
-		}
-
-		var usage *model.AnthropicUsage
-		if resp.Body != nil {
-			var respBody struct {
-				Usage *model.AnthropicUsage `json:"usage"`
-			}
-			if err := json.Unmarshal(resp.Body, &respBody); err == nil {
-				usage = respBody.Usage
-			}
-		}
-
-		tokens := int64(0)
-		if usage != nil {
-			tokens = int64(
-				usage.InputTokens +
-					usage.OutputTokens +
-					usage.CacheReadInputTokens +
-					usage.CacheCreationInputTokens)
 		}
 
 		totalTokens += tokens
-		totalRequests++
+		totalRequests += requests
+		totalResponseTime += rowResponseTime
+		responseCount += rowResponseCount
 
-		// Track response time
-		if resp.ResponseTime > 0 {
-			totalResponseTime += resp.ResponseTime
-			responseCount++
-		}
-
-		// Hourly aggregation
 		if hourly, ok := hourlyMap[hour]; ok {
 			hourly.Tokens += tokens
-			hourly.Requests++
-			// Update per-model stats
-			if hourly.Models == nil {
-				hourly.Models = make(map[string]model.ModelStats)
-			}
-			if modelStat, ok := hourly.Models[modelName]; ok {
-				modelStat.Tokens += tokens
-				modelStat.Requests++
-				hourly.Models[modelName] = modelStat
-			} else {
-				hourly.Models[modelName] = model.ModelStats{
-					Tokens:   tokens,
-					Requests: 1,
-				}
+			hourly.Requests += requests
+			hourly.Models[modelName] = model.ModelStats{
+				Tokens:   tokens,
+				Requests: requests,
 			}
 		} else {
 			hourlyMap[hour] = &model.HourlyTokens{
 				Hour:     hour,
 				Tokens:   tokens,
-				Requests: 1,
+				Requests: requests,
 				Models: map[string]model.ModelStats{
 					modelName: {
 						Tokens:   tokens,
-						Requests: 1,
+						Requests: requests,
 					},
 				},
 			}
 		}
-
 	}
 
 	// Convert map to slice
@@ -962,13 +931,18 @@ func (s *SQLiteStorageService) GetHourlyStats(startTime, endTime string) (*model
 	}, nil
 }
 
-// GetModelStats returns model breakdown for a specific time range
+// GetModelStats returns model breakdown for a specific time range - uses SQL aggregation
 func (s *SQLiteStorageService) GetModelStats(startTime, endTime string) (*model.ModelStatsResponse, error) {
+	// SQL aggregation - no JSON parsing needed
 	query := `
-		SELECT timestamp, COALESCE(model, 'unknown') as model, response
+		SELECT
+			COALESCE(model, 'unknown') as model,
+			COUNT(*) as requests,
+			SUM(COALESCE(input_tokens, 0) + COALESCE(output_tokens, 0) + COALESCE(cache_read_tokens, 0) + COALESCE(cache_creation_tokens, 0)) as tokens
 		FROM requests
-		WHERE datetime(timestamp) >= datetime(?) AND datetime(timestamp) <= datetime(?)
-		ORDER BY timestamp
+		WHERE timestamp >= ? AND timestamp < ?
+		GROUP BY model
+		ORDER BY tokens DESC
 	`
 
 	rows, err := s.db.Query(query, startTime, endTime)
@@ -977,57 +951,22 @@ func (s *SQLiteStorageService) GetModelStats(startTime, endTime string) (*model.
 	}
 	defer rows.Close()
 
-	modelMap := make(map[string]*model.ModelTokens)
+	modelStats := make([]model.ModelTokens, 0)
 
 	for rows.Next() {
-		var timestamp, modelName, responseJSON string
+		var modelName string
+		var requests int
+		var tokens int64
 
-		if err := rows.Scan(&timestamp, &modelName, &responseJSON); err != nil {
+		if err := rows.Scan(&modelName, &requests, &tokens); err != nil {
 			continue
 		}
 
-		// Parse response to get usage
-		var resp model.ResponseLog
-		if err := json.Unmarshal([]byte(responseJSON), &resp); err != nil {
-			continue
-		}
-
-		var usage *model.AnthropicUsage
-		if resp.Body != nil {
-			var respBody struct {
-				Usage *model.AnthropicUsage `json:"usage"`
-			}
-			if err := json.Unmarshal(resp.Body, &respBody); err == nil {
-				usage = respBody.Usage
-			}
-		}
-
-		tokens := int64(0)
-		if usage != nil {
-			tokens = int64(
-				usage.InputTokens +
-					usage.OutputTokens +
-					usage.CacheReadInputTokens +
-					usage.CacheCreationInputTokens)
-		}
-
-		// Model aggregation
-		if modelStat, ok := modelMap[modelName]; ok {
-			modelStat.Tokens += tokens
-			modelStat.Requests++
-		} else {
-			modelMap[modelName] = &model.ModelTokens{
-				Model:    modelName,
-				Tokens:   tokens,
-				Requests: 1,
-			}
-		}
-	}
-
-	// Convert map to slice
-	modelStats := make([]model.ModelTokens, 0)
-	for _, v := range modelMap {
-		modelStats = append(modelStats, *v)
+		modelStats = append(modelStats, model.ModelTokens{
+			Model:    modelName,
+			Tokens:   tokens,
+			Requests: requests,
+		})
 	}
 
 	return &model.ModelStatsResponse{
@@ -1066,10 +1005,9 @@ func (s *SQLiteStorageService) GetProviderStats(startTime, endTime string) (*mod
 			COUNT(*) as requests,
 			SUM(input_tokens) as input_tokens,
 			SUM(output_tokens) as output_tokens,
-			AVG(response_time_ms) as avg_response_ms,
-			response
+			AVG(response_time_ms) as avg_response_ms
 		FROM requests
-		WHERE datetime(timestamp) >= datetime(?) AND datetime(timestamp) <= datetime(?)
+		WHERE timestamp >= ? AND timestamp < ?
 		GROUP BY provider
 	`
 
@@ -1084,9 +1022,8 @@ func (s *SQLiteStorageService) GetProviderStats(startTime, endTime string) (*mod
 		var stat model.ProviderStats
 		var inputTokens, outputTokens sql.NullInt64
 		var avgResponseMs sql.NullFloat64
-		var responseJSON sql.NullString
 
-		if err := rows.Scan(&stat.Provider, &stat.Requests, &inputTokens, &outputTokens, &avgResponseMs, &responseJSON); err != nil {
+		if err := rows.Scan(&stat.Provider, &stat.Requests, &inputTokens, &outputTokens, &avgResponseMs); err != nil {
 			continue
 		}
 
@@ -1123,7 +1060,7 @@ func (s *SQLiteStorageService) GetSubagentStats(startTime, endTime string) (*mod
 			SUM(output_tokens) as output_tokens,
 			AVG(response_time_ms) as avg_response_ms
 		FROM requests
-		WHERE datetime(timestamp) >= datetime(?) AND datetime(timestamp) <= datetime(?)
+		WHERE timestamp >= ? AND timestamp < ?
 		  AND subagent_name IS NOT NULL AND subagent_name != ''
 		GROUP BY subagent_name, provider, target_model
 	`
@@ -1170,7 +1107,7 @@ func (s *SQLiteStorageService) GetToolStats(startTime, endTime string) (*model.T
 	query := `
 		SELECT tools_used, tool_call_count
 		FROM requests
-		WHERE datetime(timestamp) >= datetime(?) AND datetime(timestamp) <= datetime(?)
+		WHERE timestamp >= ? AND timestamp < ?
 		  AND tools_used IS NOT NULL AND tools_used != '[]' AND tools_used != 'null'
 	`
 
@@ -1233,7 +1170,7 @@ func (s *SQLiteStorageService) GetPerformanceStats(startTime, endTime string) (*
 			response_time_ms,
 			first_byte_time_ms
 		FROM requests
-		WHERE datetime(timestamp) >= datetime(?) AND datetime(timestamp) <= datetime(?)
+		WHERE timestamp >= ? AND timestamp < ?
 		  AND response_time_ms > 0
 		ORDER BY provider, model
 	`
@@ -1438,4 +1375,58 @@ func (s *SQLiteStorageService) SearchConversations(opts model.SearchOptions) (*m
 		Limit:   opts.Limit,
 		Offset:  opts.Offset,
 	}, nil
+}
+
+// GetIndexedConversations returns conversations from the database index - very fast
+func (s *SQLiteStorageService) GetIndexedConversations(limit int) ([]*model.IndexedConversation, error) {
+	query := `
+		SELECT id, project_path, project_name, start_time, end_time, message_count
+		FROM conversations
+		WHERE message_count > 0
+		ORDER BY end_time DESC
+	`
+
+	if limit > 0 {
+		query += fmt.Sprintf(" LIMIT %d", limit)
+	}
+
+	log.Printf("🔍 GetIndexedConversations: limit=%d, final query: %s", limit, query)
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query indexed conversations: %w", err)
+	}
+	defer rows.Close()
+
+	var conversations []*model.IndexedConversation
+	for rows.Next() {
+		var conv model.IndexedConversation
+		var startTime, endTime sql.NullString
+
+		if err := rows.Scan(
+			&conv.ID,
+			&conv.ProjectPath,
+			&conv.ProjectName,
+			&startTime,
+			&endTime,
+			&conv.MessageCount,
+		); err != nil {
+			continue
+		}
+
+		if startTime.Valid {
+			if t, err := time.Parse(time.RFC3339, startTime.String); err == nil {
+				conv.StartTime = t
+			}
+		}
+		if endTime.Valid {
+			if t, err := time.Parse(time.RFC3339, endTime.String); err == nil {
+				conv.EndTime = t
+			}
+		}
+
+		conversations = append(conversations, &conv)
+	}
+
+	return conversations, nil
 }
