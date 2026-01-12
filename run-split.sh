@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Claude Code Monitor - Split Architecture Run Script
-# Runs: Caddy (port 8000) + proxy-core (port 8001) + proxy-data (port 8002) + web dashboards
+# Runs: Caddy (port 8000) + proxy-core (port 8001) + proxy-data (port 8002) + dashboard (port 8173) + cc-viz (port 8174)
 
 set -e
 
@@ -55,7 +55,7 @@ trap "rm -rf $LOGDIR" EXIT
 # Function to cleanup on exit
 cleanup() {
     echo -e "\n${YELLOW}Shutting down services...${NC}"
-    kill $CADDY_PID $PROXY_CORE_PID $PROXY_DATA_PID $WEB_PID $DASHBOARD_PID 2>/dev/null || true
+    kill $CADDY_PID $PROXY_CORE_PID $PROXY_DATA_PID $WEB_PID $DASHBOARD_PID $CC_VIZ_PID 2>/dev/null || true
     rm -rf "$LOGDIR"
     exit
 }
@@ -115,6 +115,15 @@ if [ ! -d "dashboard/node_modules" ]; then
     echo -e "${GREEN}Dashboard dependencies installed${NC}"
 fi
 
+# Install cc-viz dependencies if needed
+if [ ! -d "cc-viz/node_modules" ]; then
+    echo -e "\n${BLUE}Installing cc-viz dependencies...${NC}"
+    cd cc-viz
+    pnpm install
+    cd ..
+    echo -e "${GREEN}CC-VIZ dependencies installed${NC}"
+fi
+
 # Start Caddy reverse proxy
 echo -e "\n${BLUE}Starting Caddy reverse proxy...${NC}"
 caddy run --config Caddyfile > "$LOGDIR/caddy.log" 2>&1 &
@@ -151,10 +160,18 @@ pnpm run dev > "$LOGDIR/dashboard.log" 2>&1 &
 DASHBOARD_PID=$!
 cd ..
 
+# Start cc-viz
+echo -e "${BLUE}Starting cc-viz (conversation browser)...${NC}"
+cd cc-viz
+pnpm run dev > "$LOGDIR/cc-viz.log" 2>&1 &
+CC_VIZ_PID=$!
+cd ..
+
 # Wait for Vite servers to be ready and extract URLs
 echo -e "${BLUE}Waiting for services to be ready...${NC}"
 WEB_URL=$(wait_for_vite_url "$LOGDIR/web.log" "web")
 DASHBOARD_URL=$(wait_for_vite_url "$LOGDIR/dashboard.log" "dashboard")
+CC_VIZ_URL=$(wait_for_vite_url "$LOGDIR/cc-viz.log" "cc-viz")
 
 echo -e "\n${GREEN}All services started!${NC}"
 echo "========================================="
@@ -165,7 +182,8 @@ echo -e "  -> /v1/*        ${BLUE}http://localhost:8001${NC} (proxy-core)"
 echo -e "  -> /api/*       ${BLUE}http://localhost:8002${NC} (proxy-data)"
 echo ""
 echo -e "Web Dashboard:    ${BLUE}${WEB_URL}${NC}"
-echo -e "New Dashboard:    ${BLUE}${DASHBOARD_URL}${NC}"
+echo -e "Dashboard:        ${BLUE}${DASHBOARD_URL}${NC}"
+echo -e "Conversations:    ${BLUE}${CC_VIZ_URL}${NC}"
 echo ""
 echo -e "Health Checks:"
 echo -e "  Caddy:          ${BLUE}http://localhost:8000/health${NC}"
@@ -175,8 +193,8 @@ echo "========================================="
 echo -e "${YELLOW}Press Ctrl+C to stop all services${NC}\n"
 
 # Tail the logs so user can see output
-tail -f "$LOGDIR/caddy.log" "$LOGDIR/proxy-core.log" "$LOGDIR/proxy-data.log" "$LOGDIR/web.log" "$LOGDIR/dashboard.log" &
+tail -f "$LOGDIR/caddy.log" "$LOGDIR/proxy-core.log" "$LOGDIR/proxy-data.log" "$LOGDIR/web.log" "$LOGDIR/dashboard.log" "$LOGDIR/cc-viz.log" &
 TAIL_PID=$!
 
 # Wait for processes
-wait $CADDY_PID $PROXY_CORE_PID $PROXY_DATA_PID $WEB_PID $DASHBOARD_PID
+wait $CADDY_PID $PROXY_CORE_PID $PROXY_DATA_PID $WEB_PID $DASHBOARD_PID $CC_VIZ_PID
