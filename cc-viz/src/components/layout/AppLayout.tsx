@@ -1,15 +1,11 @@
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import {
-  Activity,
-  BarChart3,
   ChevronLeft,
   ChevronRight,
-  GitBranch,
   Home,
   MessageSquare,
-  Settings,
-  Zap,
+  ExternalLink,
 } from 'lucide-react'
 
 interface NavItem {
@@ -28,40 +24,19 @@ interface NavSection {
 
 const navSections: NavSection[] = [
   {
-    title: 'Overview',
-    items: [
-      { id: 'dashboard', label: 'Dashboard', icon: <Home size={18} /> },
-      { id: 'requests', label: 'Requests', icon: <Activity size={18} /> },
-    ],
-  },
-  {
-    title: 'Analytics',
-    items: [
-      { id: 'usage', label: 'Token Usage', icon: <BarChart3 size={18} /> },
-      { id: 'performance', label: 'Performance', icon: <Zap size={18} /> },
-      { id: 'routing', label: 'Provider Routing', icon: <GitBranch size={18} /> },
-    ],
-  },
-  {
     title: 'Tools',
     items: [
-      { id: 'conversations', label: 'Conversations', icon: <MessageSquare size={18} />, href: 'http://localhost:8174', external: true },
-    ],
-  },
-  {
-    title: 'Configuration',
-    items: [
-      { id: 'settings', label: 'Settings', icon: <Settings size={18} /> },
+      { id: 'conversations', label: 'Conversations', icon: <MessageSquare size={18} /> },
+      { id: 'dashboard', label: 'Back to Dashboard', icon: <Home size={18} />, href: 'http://localhost:8173', external: true },
     ],
   },
 ]
 
 interface SidebarProps {
   activeItem: string
-  onItemSelect: (id: string) => void
 }
 
-export function Sidebar({ activeItem, onItemSelect }: SidebarProps) {
+function Sidebar({ activeItem }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false)
 
   return (
@@ -76,7 +51,7 @@ export function Sidebar({ activeItem, onItemSelect }: SidebarProps) {
       <div className="flex items-center justify-between h-12 px-3 border-b border-[var(--color-border)]">
         {!collapsed && (
           <span className="text-sm font-semibold text-[var(--color-text-primary)]">
-            Proxy Monitor
+            CC-VIZ
           </span>
         )}
         <button
@@ -131,11 +106,11 @@ export function Sidebar({ activeItem, onItemSelect }: SidebarProps) {
                         )}>
                           {item.icon}
                         </span>
-                        {!collapsed && <span>{item.label}</span>}
-                        {!collapsed && item.badge !== undefined && (
-                          <span className="ml-auto text-xs bg-[var(--color-accent)] text-white px-1.5 py-0.5 rounded">
-                            {item.badge}
-                          </span>
+                        {!collapsed && (
+                          <>
+                            <span className="flex-1">{item.label}</span>
+                            <ExternalLink size={12} className="text-[var(--color-text-muted)]" />
+                          </>
                         )}
                       </a>
                     </li>
@@ -145,9 +120,9 @@ export function Sidebar({ activeItem, onItemSelect }: SidebarProps) {
                 return (
                   <li key={item.id}>
                     <button
-                      onClick={() => onItemSelect(item.id)}
                       className={buttonClass}
                       title={collapsed ? item.label : undefined}
+                      disabled
                     >
                       <span className={cn(
                         isActive ? 'text-[var(--color-accent)]' : ''
@@ -174,10 +149,51 @@ export function Sidebar({ activeItem, onItemSelect }: SidebarProps) {
         <div className="px-3 py-2 border-t border-[var(--color-border)]">
           <div className="flex items-center gap-2 text-xs text-[var(--color-text-muted)]">
             <div className="w-2 h-2 rounded-full bg-[var(--color-success)]" />
-            <span>Proxy running</span>
+            <span>Connected</span>
           </div>
         </div>
       )}
     </aside>
+  )
+}
+
+interface PageHeaderProps {
+  title: string
+  description?: string
+  actions?: React.ReactNode
+}
+
+function PageHeader({ title, description, actions }: PageHeaderProps) {
+  return (
+    <header className="flex items-center justify-between h-12 px-4 border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+      <div>
+        <h1 className="text-sm font-semibold text-[var(--color-text-primary)]">{title}</h1>
+        {description && (
+          <p className="text-xs text-[var(--color-text-muted)]">{description}</p>
+        )}
+      </div>
+      {actions && <div className="flex items-center gap-2">{actions}</div>}
+    </header>
+  )
+}
+
+interface AppLayoutProps {
+  children: React.ReactNode
+  title: string
+  description?: string
+  actions?: React.ReactNode
+}
+
+export function AppLayout({ children, title, description, actions }: AppLayoutProps) {
+  return (
+    <div className="flex h-screen overflow-hidden bg-[var(--color-bg-primary)]">
+      <Sidebar activeItem="conversations" />
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        <PageHeader title={title} description={description} actions={actions} />
+        <div className="flex-1 overflow-auto">
+          {children}
+        </div>
+      </main>
+    </div>
   )
 }

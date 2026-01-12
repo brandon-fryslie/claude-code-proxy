@@ -4,14 +4,20 @@ import { QueryClientProvider, QueryClient } from '@tanstack/react-query'
 import { ConversationsPage } from './pages/Conversations'
 import './index.css'
 
-const queryClient = new QueryClient()
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60, // 1 minute
+      refetchOnWindowFocus: false,
+      gcTime: 1000 * 60 * 10, // 10 minutes
+    },
+  },
+})
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <div className="h-screen flex flex-col bg-[var(--color-bg-primary)]">
-        <ConversationsPage />
-      </div>
+      <ConversationsPage />
     </QueryClientProvider>
   </React.StrictMode>,
 )

@@ -1,1 +1,1 @@
-export { PageHeader } from './PageHeader'
+export { AppLayout } from './AppLayout'

@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react'
-import { PageHeader } from '@/components/layout'
+import { AppLayout } from '@/components/layout'
 import { MessageSquare, ArrowUpDown } from 'lucide-react'
 import { useConversations, useConversationDetail, useConversationMessages } from '@/lib/api'
 import type { ConversationDetail, DBConversationMessage } from '@/lib/types'
@@ -216,12 +216,11 @@ export function ConversationsPage() {
   }
 
   return (
-    <>
-      <PageHeader
-        title="Conversations"
-        description="Browse Claude Code conversation logs"
-      />
-      <div className="flex-1 flex overflow-hidden">
+    <AppLayout
+      title="Conversations"
+      description="Browse Claude Code conversation logs"
+    >
+      <div className="flex-1 flex overflow-hidden h-full">
         {/* Left Sidebar - Conversation List */}
         <div className="w-80 border-r border-[var(--color-border)] bg-[var(--color-bg-secondary)] flex flex-col">
           {/* Search and Sort */}
@@ -264,6 +263,6 @@ export function ConversationsPage() {
           <ConversationDetailPane conversationId={selectedConversationId} />
         </div>
       </div>
-    </>
+    </AppLayout>
   )
 }
