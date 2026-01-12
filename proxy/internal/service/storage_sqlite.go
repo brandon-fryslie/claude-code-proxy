@@ -1596,6 +1596,116 @@ func (s *SQLiteStorageService) GetConversationMessages(conversationID string, li
 	return messages, total, nil
 }
 
+// GetConversationMessagesWithSubagents returns messages including subagent messages merged by timestamp
+func (s *SQLiteStorageService) GetConversationMessagesWithSubagents(conversationID string, limit, offset int) ([]*model.DBConversationMessage, int, error) {
+	// Get messages from parent conversation + all subagent conversations
+	// Subagent messages have session_id matching the parent conversation_id
+
+	// Set default limit
+	if limit <= 0 {
+		limit = 100
+	}
+
+	// First get the count of all messages (parent + subagents)
+	var total int
+	err := s.db.QueryRow(`
+		SELECT COUNT(*) FROM conversation_messages
+		WHERE conversation_id = ? OR session_id = ?
+	`, conversationID, conversationID).Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count messages: %w", err)
+	}
+
+	// Get all messages from parent and subagents, ordered by timestamp
+	query := `
+		SELECT uuid, conversation_id, parent_uuid, type, role, timestamp,
+		       cwd, git_branch, session_id, agent_id, is_sidechain,
+		       request_id, model, input_tokens, output_tokens,
+		       cache_read_tokens, cache_creation_tokens, content_json
+		FROM conversation_messages
+		WHERE conversation_id = ? OR session_id = ?
+		ORDER BY timestamp ASC
+		LIMIT ? OFFSET ?
+	`
+
+	rows, err := s.db.Query(query, conversationID, conversationID, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to query messages: %w", err)
+	}
+	defer rows.Close()
+
+	var messages []*model.DBConversationMessage
+	for rows.Next() {
+		var msg model.DBConversationMessage
+		var parentUUID, role, cwd, gitBranch, sessionID, agentID, requestID, modelName sql.NullString
+		var contentJSON sql.NullString
+		var timestampStr string
+
+		err := rows.Scan(
+			&msg.UUID,
+			&msg.ConversationID,
+			&parentUUID,
+			&msg.Type,
+			&role,
+			&timestampStr,
+			&cwd,
+			&gitBranch,
+			&sessionID,
+			&agentID,
+			&msg.IsSidechain,
+			&requestID,
+			&modelName,
+			&msg.InputTokens,
+			&msg.OutputTokens,
+			&msg.CacheReadTokens,
+			&msg.CacheCreationTokens,
+			&contentJSON,
+		)
+		if err != nil {
+			log.Printf("⚠️ Error scanning message row: %v", err)
+			continue
+		}
+
+		// Parse timestamp
+		if t, err := time.Parse(time.RFC3339, timestampStr); err == nil {
+			msg.Timestamp = t
+		}
+
+		// Handle nullable fields
+		if parentUUID.Valid {
+			msg.ParentUUID = &parentUUID.String
+		}
+		if role.Valid {
+			msg.Role = role.String
+		}
+		if cwd.Valid {
+			msg.CWD = cwd.String
+		}
+		if gitBranch.Valid {
+			msg.GitBranch = gitBranch.String
+		}
+		if sessionID.Valid {
+			msg.SessionID = sessionID.String
+		}
+		if agentID.Valid {
+			msg.AgentID = agentID.String
+		}
+		if requestID.Valid {
+			msg.RequestID = requestID.String
+		}
+		if modelName.Valid {
+			msg.Model = modelName.String
+		}
+		if contentJSON.Valid {
+			msg.Content = json.RawMessage(contentJSON.String)
+		}
+
+		messages = append(messages, &msg)
+	}
+
+	return messages, total, nil
+}
+
 // ReindexConversations triggers a full re-index by clearing indexed_at timestamps
 func (s *SQLiteStorageService) ReindexConversations() error {
 	_, err := s.db.Exec("UPDATE conversations SET indexed_at = NULL")

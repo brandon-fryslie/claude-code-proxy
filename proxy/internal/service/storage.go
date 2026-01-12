@@ -43,6 +43,9 @@ type StorageService interface {
 	// GetConversationMessages returns messages for a conversation from the database
 	GetConversationMessages(conversationID string, limit, offset int) ([]*model.DBConversationMessage, int, error)
 
+	// GetConversationMessagesWithSubagents returns messages including subagent messages merged by timestamp
+	GetConversationMessagesWithSubagents(conversationID string, limit, offset int) ([]*model.DBConversationMessage, int, error)
+
 	// ReindexConversations triggers a full re-index of all conversations
 	ReindexConversations() error
 }

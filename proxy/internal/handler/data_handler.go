@@ -725,6 +725,7 @@ func (h *DataHandler) getConversationByIDFallback(w http.ResponseWriter, session
 
 // GetConversationMessagesV2 returns conversation messages from the database.
 // This is faster than reading from files as messages are pre-indexed.
+// Supports ?include_subagents=true to merge subagent messages with parent conversation.
 func (h *DataHandler) GetConversationMessagesV2(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	conversationID, ok := vars["id"]
@@ -747,7 +748,19 @@ func (h *DataHandler) GetConversationMessagesV2(w http.ResponseWriter, r *http.R
 		}
 	}
 
-	messages, total, err := h.storageService.GetConversationMessages(conversationID, limit, offset)
+	// Check for include_subagents parameter
+	includeSubagents := r.URL.Query().Get("include_subagents") == "true"
+
+	var messages []*model.DBConversationMessage
+	var total int
+	var err error
+
+	if includeSubagents {
+		messages, total, err = h.storageService.GetConversationMessagesWithSubagents(conversationID, limit, offset)
+	} else {
+		messages, total, err = h.storageService.GetConversationMessages(conversationID, limit, offset)
+	}
+
 	if err != nil {
 		log.Printf("❌ Error getting conversation messages: %v", err)
 		writeErrorResponse(w, "Failed to get conversation messages", http.StatusInternalServerError)
