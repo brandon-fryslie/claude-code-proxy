@@ -26,11 +26,13 @@ run:
     ./run-split.sh
 
 # Run with podman (complete dev stack with HMR)
+# Starts: caddy, proxy-core, proxy-data, dashboard (8173), cc-viz (8174)
 # Uses cached images - run `just build-docker` if you changed Go code
 dev:
     podman-compose up
 
 # Run with podman and rebuild images (use when Go code changes)
+# Rebuilds and starts all services with HMR support
 dev-build:
     podman-compose up --build
 
