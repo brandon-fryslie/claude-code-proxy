@@ -31,7 +31,7 @@ const navSections: NavSection[] = [
     title: 'Overview',
     items: [
       { id: 'dashboard', label: 'Dashboard', icon: <Home size={18} /> },
-      { id: 'cc-viz', label: 'CC-VIZ', icon: <MessageSquare size={18} />, href: 'http://localhost:8174', external: true },
+      { id: 'cc-viz', label: 'CC-VIZ', icon: <MessageSquare size={18} />, href: '/cc-viz/', external: false },
       { id: 'requests', label: 'Requests', icon: <Activity size={18} /> },
     ],
   },
@@ -111,13 +111,13 @@ export function Sidebar({ activeItem, onItemSelect }: SidebarProps) {
                   collapsed && 'justify-center px-0'
                 )
 
-                if (item.external && item.href) {
+                if (item.href) {
                   return (
                     <li key={item.id}>
                       <a
                         href={item.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        target={item.external ? '_blank' : undefined}
+                        rel={item.external ? 'noopener noreferrer' : undefined}
                         className={buttonClass}
                         title={collapsed ? item.label : undefined}
                       >

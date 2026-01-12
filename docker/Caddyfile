@@ -40,6 +40,16 @@
 		reverse_proxy proxy-data:8002
 	}
 
+	# Dashboard UI - route to dashboard service
+	handle /dashboard/* {
+		reverse_proxy dashboard:8173
+	}
+
+	# CC-VIZ (Conversations Browser) - route to cc-viz service
+	handle /cc-viz/* {
+		reverse_proxy cc-viz:8174
+	}
+
 	# UI routes - route to proxy-data
 	handle /ui {
 		reverse_proxy proxy-data:8002

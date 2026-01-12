@@ -27,7 +27,7 @@ const navSections: NavSection[] = [
     title: 'Tools',
     items: [
       { id: 'conversations', label: 'Conversations', icon: <MessageSquare size={18} /> },
-      { id: 'dashboard', label: 'Back to Dashboard', icon: <Home size={18} />, href: 'http://localhost:8173', external: true },
+      { id: 'dashboard', label: 'Back to Dashboard', icon: <Home size={18} />, href: '/dashboard/', external: false },
     ],
   },
 ]
@@ -91,13 +91,13 @@ function Sidebar({ activeItem }: SidebarProps) {
                   collapsed && 'justify-center px-0'
                 )
 
-                if (item.external && item.href) {
+                if (item.href) {
                   return (
                     <li key={item.id}>
                       <a
                         href={item.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                        target={item.external ? '_blank' : undefined}
+                        rel={item.external ? 'noopener noreferrer' : undefined}
                         className={buttonClass}
                         title={collapsed ? item.label : undefined}
                       >
@@ -109,7 +109,7 @@ function Sidebar({ activeItem }: SidebarProps) {
                         {!collapsed && (
                           <>
                             <span className="flex-1">{item.label}</span>
-                            <ExternalLink size={12} className="text-[var(--color-text-muted)]" />
+                            {item.external && <ExternalLink size={12} className="text-[var(--color-text-muted)]" />}
                           </>
                         )}
                       </a>
