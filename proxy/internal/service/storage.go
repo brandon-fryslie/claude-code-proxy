@@ -36,4 +36,13 @@ type StorageService interface {
 
 	// Indexed conversations - fast database lookup
 	GetIndexedConversations(limit int) ([]*model.IndexedConversation, error)
+
+	// GetConversationFilePath returns the file path and project path for a conversation by ID
+	GetConversationFilePath(conversationID string) (filePath string, projectPath string, err error)
+
+	// GetConversationMessages returns messages for a conversation from the database
+	GetConversationMessages(conversationID string, limit, offset int) ([]*model.DBConversationMessage, int, error)
+
+	// ReindexConversations triggers a full re-index of all conversations
+	ReindexConversations() error
 }

@@ -36,11 +36,33 @@ type ConversationMessage struct {
 	CWD         string          `json:"cwd"`
 	SessionID   string          `json:"sessionId"`
 	Version     string          `json:"version"`
+	GitBranch   string          `json:"gitBranch,omitempty"`
+	AgentID     string          `json:"agentId,omitempty"`
+	RequestID   string          `json:"requestId,omitempty"`
 	Type        string          `json:"type"`
 	Message     json.RawMessage `json:"message"`
 	UUID        string          `json:"uuid"`
 	Timestamp   string          `json:"timestamp"`
 	ParsedTime  time.Time       `json:"-"`
+	IsMeta      bool            `json:"isMeta,omitempty"`
+}
+
+// MessageContent represents the parsed message field
+type MessageContent struct {
+	Role        string          `json:"role,omitempty"`
+	Content     json.RawMessage `json:"content,omitempty"`
+	Model       string          `json:"model,omitempty"`
+	ID          string          `json:"id,omitempty"`
+	StopReason  string          `json:"stop_reason,omitempty"`
+	Usage       *MessageUsage   `json:"usage,omitempty"`
+}
+
+// MessageUsage represents token usage from a message
+type MessageUsage struct {
+	InputTokens              int `json:"input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
 }
 
 // Conversation represents a complete conversation session

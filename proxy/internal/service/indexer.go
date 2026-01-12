@@ -2,6 +2,7 @@ package service
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -200,46 +201,106 @@ func (ci *ConversationIndexer) indexFile(filePath string) error {
 		return fmt.Errorf("failed to insert conversation: %w", err)
 	}
 
-	// Delete existing FTS entries for this conversation
+	// Delete existing entries for this conversation
 	_, err = tx.Exec("DELETE FROM conversations_fts WHERE conversation_id = ?", conv.SessionID)
 	if err != nil {
 		return fmt.Errorf("failed to delete old FTS entries: %w", err)
 	}
+	_, err = tx.Exec("DELETE FROM conversation_messages WHERE conversation_id = ?", conv.SessionID)
+	if err != nil {
+		return fmt.Errorf("failed to delete old message entries: %w", err)
+	}
 
-	// Index each message
-	insertStmt, err := tx.Prepare(`
+	// Prepare FTS insert statement
+	ftsStmt, err := tx.Prepare(`
 		INSERT INTO conversations_fts (conversation_id, message_uuid, message_type, content_text, tool_names, timestamp)
 		VALUES (?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
-		return fmt.Errorf("failed to prepare insert statement: %w", err)
+		return fmt.Errorf("failed to prepare FTS insert statement: %w", err)
 	}
-	defer insertStmt.Close()
+	defer ftsStmt.Close()
+
+	// Prepare full message insert statement (use INSERT OR REPLACE to handle duplicate UUIDs)
+	msgStmt, err := tx.Prepare(`
+		INSERT OR REPLACE INTO conversation_messages (
+			uuid, conversation_id, parent_uuid, type, role, timestamp,
+			cwd, git_branch, session_id, agent_id, is_sidechain,
+			request_id, model, input_tokens, output_tokens,
+			cache_read_tokens, cache_creation_tokens, content_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare message insert statement: %w", err)
+	}
+	defer msgStmt.Close()
 
 	for _, msg := range conv.Messages {
-		text, toolNames, err := ExtractMessageContent(msg)
-		if err != nil {
-			log.Printf("⚠️  Error extracting content from message %s: %v", msg.UUID, err)
-			continue
-		}
-
-		// Skip empty messages
-		if text == "" && len(toolNames) == 0 {
-			continue
-		}
-
+		// Extract content for FTS
+		text, toolNames, _ := ExtractMessageContent(msg)
 		toolNamesStr := strings.Join(toolNames, " ")
 
-		_, err = insertStmt.Exec(
-			conv.SessionID,
+		// Insert into FTS if there's content
+		if text != "" || len(toolNames) > 0 {
+			_, err = ftsStmt.Exec(
+				conv.SessionID,
+				msg.UUID,
+				msg.Type,
+				text,
+				toolNamesStr,
+				msg.Timestamp,
+			)
+			if err != nil {
+				log.Printf("⚠️  Error inserting FTS entry for message %s: %v", msg.UUID, err)
+			}
+		}
+
+		// Parse message content for additional fields
+		var msgContent MessageContent
+		var role, model string
+		var inputTokens, outputTokens, cacheRead, cacheCreation int
+
+		if len(msg.Message) > 0 {
+			if err := json.Unmarshal(msg.Message, &msgContent); err == nil {
+				role = msgContent.Role
+				model = msgContent.Model
+				if msgContent.Usage != nil {
+					inputTokens = msgContent.Usage.InputTokens
+					outputTokens = msgContent.Usage.OutputTokens
+					cacheRead = msgContent.Usage.CacheReadInputTokens
+					cacheCreation = msgContent.Usage.CacheCreationInputTokens
+				}
+			}
+		}
+
+		// Insert full message data
+		var parentUUID interface{}
+		if msg.ParentUUID != nil {
+			parentUUID = *msg.ParentUUID
+		}
+
+		_, err = msgStmt.Exec(
 			msg.UUID,
+			conv.SessionID,
+			parentUUID,
 			msg.Type,
-			text,
-			toolNamesStr,
+			role,
 			msg.Timestamp,
+			msg.CWD,
+			msg.GitBranch,
+			msg.SessionID,
+			msg.AgentID,
+			msg.IsSidechain,
+			msg.RequestID,
+			model,
+			inputTokens,
+			outputTokens,
+			cacheRead,
+			cacheCreation,
+			string(msg.Message),
 		)
 		if err != nil {
-			log.Printf("⚠️  Error inserting FTS entry for message %s: %v", msg.UUID, err)
+			log.Printf("⚠️  Error inserting message %s: %v", msg.UUID, err)
 			continue
 		}
 	}

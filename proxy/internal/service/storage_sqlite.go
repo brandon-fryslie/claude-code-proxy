@@ -197,6 +197,55 @@ func (s *SQLiteStorageService) runConversationSearchMigrations() error {
 		log.Println("✅ Created conversations_fts FTS5 table")
 	}
 
+	// Check if conversation_messages table exists
+	var messagesExists int
+	err = s.db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='conversation_messages'").Scan(&messagesExists)
+	if err != nil {
+		return fmt.Errorf("failed to check if conversation_messages table exists: %w", err)
+	}
+
+	if messagesExists == 0 {
+		// Create conversation_messages table to store full message data
+		messagesSchema := `
+		CREATE TABLE conversation_messages (
+			uuid TEXT PRIMARY KEY,
+			conversation_id TEXT NOT NULL,
+			parent_uuid TEXT,
+			type TEXT NOT NULL,
+			role TEXT,
+			timestamp DATETIME NOT NULL,
+			cwd TEXT,
+			git_branch TEXT,
+			session_id TEXT,
+			agent_id TEXT,
+			is_sidechain BOOLEAN DEFAULT FALSE,
+			request_id TEXT,
+			model TEXT,
+			input_tokens INTEGER DEFAULT 0,
+			output_tokens INTEGER DEFAULT 0,
+			cache_read_tokens INTEGER DEFAULT 0,
+			cache_creation_tokens INTEGER DEFAULT 0,
+			content_json TEXT,
+			tool_use_json TEXT,
+			tool_result_json TEXT,
+			FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+		);
+
+		CREATE INDEX idx_messages_conversation ON conversation_messages(conversation_id);
+		CREATE INDEX idx_messages_timestamp ON conversation_messages(timestamp);
+		CREATE INDEX idx_messages_parent ON conversation_messages(parent_uuid);
+		CREATE INDEX idx_messages_session ON conversation_messages(session_id);
+		CREATE INDEX idx_messages_agent ON conversation_messages(agent_id);
+		CREATE INDEX idx_messages_request ON conversation_messages(request_id);
+		`
+
+		if _, err := s.db.Exec(messagesSchema); err != nil {
+			return fmt.Errorf("failed to create conversation_messages table: %w", err)
+		}
+
+		log.Println("✅ Created conversation_messages table")
+	}
+
 	return nil
 }
 
@@ -1429,4 +1478,130 @@ func (s *SQLiteStorageService) GetIndexedConversations(limit int) ([]*model.Inde
 	}
 
 	return conversations, nil
+}
+
+// GetConversationFilePath returns the file path and project path for a conversation by ID
+func (s *SQLiteStorageService) GetConversationFilePath(conversationID string) (string, string, error) {
+	var filePath, projectPath string
+	err := s.db.QueryRow(
+		"SELECT file_path, project_path FROM conversations WHERE id = ?",
+		conversationID,
+	).Scan(&filePath, &projectPath)
+	if err != nil {
+		return "", "", fmt.Errorf("conversation not found: %w", err)
+	}
+	return filePath, projectPath, nil
+}
+
+// GetConversationMessages returns messages for a conversation from the database
+func (s *SQLiteStorageService) GetConversationMessages(conversationID string, limit, offset int) ([]*model.DBConversationMessage, int, error) {
+	// Get total count
+	var total int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM conversation_messages WHERE conversation_id = ?", conversationID).Scan(&total)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count messages: %w", err)
+	}
+
+	// Set default limit
+	if limit <= 0 {
+		limit = 100
+	}
+
+	query := `
+		SELECT uuid, conversation_id, parent_uuid, type, role, timestamp,
+		       cwd, git_branch, session_id, agent_id, is_sidechain,
+		       request_id, model, input_tokens, output_tokens,
+		       cache_read_tokens, cache_creation_tokens, content_json
+		FROM conversation_messages
+		WHERE conversation_id = ?
+		ORDER BY timestamp ASC
+		LIMIT ? OFFSET ?
+	`
+
+	rows, err := s.db.Query(query, conversationID, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to query messages: %w", err)
+	}
+	defer rows.Close()
+
+	var messages []*model.DBConversationMessage
+	for rows.Next() {
+		var msg model.DBConversationMessage
+		var parentUUID, role, cwd, gitBranch, sessionID, agentID, requestID, modelName sql.NullString
+		var contentJSON sql.NullString
+		var timestampStr string
+
+		err := rows.Scan(
+			&msg.UUID,
+			&msg.ConversationID,
+			&parentUUID,
+			&msg.Type,
+			&role,
+			&timestampStr,
+			&cwd,
+			&gitBranch,
+			&sessionID,
+			&agentID,
+			&msg.IsSidechain,
+			&requestID,
+			&modelName,
+			&msg.InputTokens,
+			&msg.OutputTokens,
+			&msg.CacheReadTokens,
+			&msg.CacheCreationTokens,
+			&contentJSON,
+		)
+		if err != nil {
+			log.Printf("⚠️ Error scanning message row: %v", err)
+			continue
+		}
+
+		// Parse timestamp
+		if t, err := time.Parse(time.RFC3339, timestampStr); err == nil {
+			msg.Timestamp = t
+		}
+
+		// Handle nullable fields
+		if parentUUID.Valid {
+			msg.ParentUUID = &parentUUID.String
+		}
+		if role.Valid {
+			msg.Role = role.String
+		}
+		if cwd.Valid {
+			msg.CWD = cwd.String
+		}
+		if gitBranch.Valid {
+			msg.GitBranch = gitBranch.String
+		}
+		if sessionID.Valid {
+			msg.SessionID = sessionID.String
+		}
+		if agentID.Valid {
+			msg.AgentID = agentID.String
+		}
+		if requestID.Valid {
+			msg.RequestID = requestID.String
+		}
+		if modelName.Valid {
+			msg.Model = modelName.String
+		}
+		if contentJSON.Valid {
+			msg.Content = json.RawMessage(contentJSON.String)
+		}
+
+		messages = append(messages, &msg)
+	}
+
+	return messages, total, nil
+}
+
+// ReindexConversations triggers a full re-index by clearing indexed_at timestamps
+func (s *SQLiteStorageService) ReindexConversations() error {
+	_, err := s.db.Exec("UPDATE conversations SET indexed_at = NULL")
+	if err != nil {
+		return fmt.Errorf("failed to clear indexed_at: %w", err)
+	}
+	log.Println("🔄 Cleared indexed_at timestamps - conversations will be re-indexed")
+	return nil
 }
