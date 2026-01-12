@@ -364,3 +364,34 @@ type IndexedConversation struct {
 	MessageCount int       `json:"requestCount"`
 }
 
+// DBConversationMessage represents a message stored in the database
+type DBConversationMessage struct {
+	UUID                  string          `json:"uuid"`
+	ConversationID        string          `json:"conversationId"`
+	ParentUUID            *string         `json:"parentUuid,omitempty"`
+	Type                  string          `json:"type"`
+	Role                  string          `json:"role,omitempty"`
+	Timestamp             time.Time       `json:"timestamp"`
+	CWD                   string          `json:"cwd,omitempty"`
+	GitBranch             string          `json:"gitBranch,omitempty"`
+	SessionID             string          `json:"sessionId,omitempty"`
+	AgentID               string          `json:"agentId,omitempty"`
+	IsSidechain           bool            `json:"isSidechain"`
+	RequestID             string          `json:"requestId,omitempty"`
+	Model                 string          `json:"model,omitempty"`
+	InputTokens           int             `json:"inputTokens,omitempty"`
+	OutputTokens          int             `json:"outputTokens,omitempty"`
+	CacheReadTokens       int             `json:"cacheReadTokens,omitempty"`
+	CacheCreationTokens   int             `json:"cacheCreationTokens,omitempty"`
+	Content               json.RawMessage `json:"content,omitempty"`
+}
+
+// ConversationMessagesResponse wraps messages with pagination info
+type ConversationMessagesResponse struct {
+	ConversationID string                   `json:"conversationId"`
+	Messages       []*DBConversationMessage `json:"messages"`
+	Total          int                      `json:"total"`
+	Offset         int                      `json:"offset"`
+	Limit          int                      `json:"limit"`
+}
+

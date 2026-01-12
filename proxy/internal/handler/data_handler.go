@@ -673,6 +673,7 @@ func (h *DataHandler) GetConversationsV2(w http.ResponseWriter, r *http.Request)
 }
 
 // GetConversationByIDV2 returns conversation directly using session ID only.
+// Uses indexed database lookup for fast retrieval instead of scanning all files.
 func (h *DataHandler) GetConversationByIDV2(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	sessionID, ok := vars["id"]
@@ -681,6 +682,28 @@ func (h *DataHandler) GetConversationByIDV2(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Fast path: look up file path from database index
+	filePath, projectPath, err := h.storageService.GetConversationFilePath(sessionID)
+	if err != nil {
+		log.Printf("⚠️ Conversation %s not in index, falling back to scan: %v", sessionID, err)
+		// Fallback to slow scan for conversations not yet indexed
+		h.getConversationByIDFallback(w, sessionID)
+		return
+	}
+
+	// Load the specific conversation file directly
+	conversation, err := h.conversationService.GetConversation(projectPath, sessionID)
+	if err != nil {
+		log.Printf("❌ Error loading conversation from %s: %v", filePath, err)
+		writeErrorResponse(w, "Failed to load conversation", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSONResponse(w, conversation)
+}
+
+// getConversationByIDFallback scans all conversations when index lookup fails
+func (h *DataHandler) getConversationByIDFallback(w http.ResponseWriter, sessionID string) {
 	conversations, err := h.conversationService.GetConversations()
 	if err != nil {
 		log.Printf("❌ Error getting conversations: %v", err)
@@ -698,6 +721,62 @@ func (h *DataHandler) GetConversationByIDV2(w http.ResponseWriter, r *http.Reque
 	}
 
 	writeErrorResponse(w, "Conversation not found", http.StatusNotFound)
+}
+
+// GetConversationMessagesV2 returns conversation messages from the database.
+// This is faster than reading from files as messages are pre-indexed.
+func (h *DataHandler) GetConversationMessagesV2(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	conversationID, ok := vars["id"]
+	if !ok {
+		writeErrorResponse(w, "Conversation ID is required", http.StatusBadRequest)
+		return
+	}
+
+	// Parse pagination params
+	limit := 100
+	offset := 0
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+	if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
+			offset = o
+		}
+	}
+
+	messages, total, err := h.storageService.GetConversationMessages(conversationID, limit, offset)
+	if err != nil {
+		log.Printf("❌ Error getting conversation messages: %v", err)
+		writeErrorResponse(w, "Failed to get conversation messages", http.StatusInternalServerError)
+		return
+	}
+
+	response := model.ConversationMessagesResponse{
+		ConversationID: conversationID,
+		Messages:       messages,
+		Total:          total,
+		Offset:         offset,
+		Limit:          limit,
+	}
+
+	writeJSONResponse(w, response)
+}
+
+// ReindexConversationsV2 triggers a re-index of all conversations.
+func (h *DataHandler) ReindexConversationsV2(w http.ResponseWriter, r *http.Request) {
+	if err := h.storageService.ReindexConversations(); err != nil {
+		log.Printf("❌ Error triggering re-index: %v", err)
+		writeErrorResponse(w, "Failed to trigger re-index", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSONResponse(w, map[string]string{
+		"status":  "ok",
+		"message": "Re-indexing triggered. Conversations will be re-indexed in the background.",
+	})
 }
 
 // GetHourlyStatsV2 returns hourly stats with consistent format.

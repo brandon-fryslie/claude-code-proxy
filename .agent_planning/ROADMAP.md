@@ -2,7 +2,7 @@
 
 **Goal:** Achieve feature parity between old dashboard (web/) and new dashboard (dashboard/)
 
-**Last Updated:** 2026-01-09
+**Last Updated:** 2026-01-12
 
 ---
 
@@ -33,12 +33,13 @@
   - ✅ URL parameter persistence (?model=opus)
   - ✅ Backend filtering integrated
 
-- **conversation-search-indexing** [COMPLETED]
+- **conversation-search-indexing** [IN PROGRESS]
   - Epic: `brandon-fryslie_claude-code-proxy-d0o`
   - ✅ SQLite FTS5 implementation with 1973 conversations indexed
   - ✅ File watcher for ~/.claude/projects/ indexing
   - ✅ `/api/conversations/search?q=...` endpoint with pagination
   - ✅ Comprehensive E2E tests (22 test cases)
+  - ⚠️ **BUG (2026-01-12):** Full text search not working - needs investigation
 
 ---
 
@@ -123,12 +124,16 @@
   - User/Assistant message bubbles
   - Tool calls inline
 
-- **web-routing-configuration** [PROPOSED]
-  - Configure subagent-to-provider routing from web UI
-  - View/edit config.yaml subagent mappings
-  - Add/remove/modify routing rules
-  - Persist changes to config file
-  - Reload proxy configuration
+- **web-routing-configuration** [IN PROGRESS]
+  - **Phase 1: View Configuration (MVP)**
+    - Display current provider configurations (name, format, base URL)
+    - Show subagent routing mappings (agent → provider:model)
+    - Show which providers are configured and active
+  - **Phase 2: Edit Configuration**
+    - Edit subagent-to-provider routing rules
+    - Add/remove/modify routing mappings
+    - Persist changes to config.yaml
+    - Reload proxy configuration without restart
 
 - **data-management** [PROPOSED]
   - Epic: `brandon-fryslie_claude-code-proxy-5jo`
