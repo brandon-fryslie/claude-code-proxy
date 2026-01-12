@@ -9,15 +9,12 @@ import type {
   SubagentStatsResponse,
   ToolStatsResponse,
   PerformanceStatsResponse,
-  Conversation,
-  ConversationDetail,
   Config,
   ProviderConfig,
   SubagentsConfig,
   RoutingConfig,
   ProviderHealth,
   RoutingStatsResponse,
-  ConversationMessagesResponse,
 } from './types'
 
 // Use V2 API for cleaner responses
@@ -174,44 +171,6 @@ export function usePerformanceStats(params?: StatsParams) {
   return useQuery({
     queryKey: ['stats', 'performance', params],
     queryFn: () => fetchAPI<PerformanceStatsResponse>(`/stats/performance${queryString}`),
-  })
-}
-
-// ============================================================================
-// Conversation Queries
-// ============================================================================
-
-// V2 API returns array directly
-export function useConversations() {
-  return useQuery({
-    queryKey: ['conversations'],
-    queryFn: () => fetchAPI<Conversation[]>('/conversations'),
-  })
-}
-
-// V2 API returns conversation directly (no project param needed)
-export function useConversationDetail(id: string | null) {
-  return useQuery({
-    queryKey: ['conversations', 'detail', id],
-    queryFn: () => fetchAPI<ConversationDetail>(`/conversations/${id}`),
-    enabled: !!id,
-  })
-}
-
-// V2 API returns paginated messages from database
-export function useConversationMessages(
-  id: string | null,
-  options?: { limit?: number; offset?: number; includeSubagents?: boolean }
-) {
-  const queryString = buildQueryString({
-    limit: options?.limit || 100,
-    offset: options?.offset || 0,
-    include_subagents: options?.includeSubagents ? 'true' : undefined,
-  })
-  return useQuery({
-    queryKey: ['conversations', 'messages', id, options],
-    queryFn: () => fetchAPI<ConversationMessagesResponse>(`/conversations/${id}/messages${queryString}`),
-    enabled: !!id,
   })
 }
 

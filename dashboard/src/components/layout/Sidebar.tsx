@@ -7,7 +7,6 @@ import {
   ChevronRight,
   GitBranch,
   Home,
-  MessageSquare,
   Settings,
   Zap,
 } from 'lucide-react'
@@ -30,7 +29,6 @@ const navSections: NavSection[] = [
     items: [
       { id: 'dashboard', label: 'Dashboard', icon: <Home size={18} /> },
       { id: 'requests', label: 'Requests', icon: <Activity size={18} /> },
-      { id: 'conversations', label: 'Conversations', icon: <MessageSquare size={18} /> },
     ],
   },
   {

@@ -14,8 +14,9 @@
 # Or use: just dev, just stop, just restart-data
 #
 # Access:
-#   API Proxy:        http://localhost:8000
-#   Web Dashboard:    http://localhost:8173
+#   API Proxy:          http://localhost:8000
+#   Dashboard:          http://localhost:8173
+#   Conversations (cc-viz): http://localhost:8174
 
 version: '3.8'
 
@@ -131,7 +132,7 @@ services:
   #       condition: service_healthy
 
   # New dashboard with Hot Module Reload (HMR)
-  # This is the primary dashboard - runs on port 5173
+  # This is the primary dashboard - runs on port 8173
   dashboard:
     image: node:20-alpine
     container_name: claude-proxy-dashboard
@@ -159,6 +160,36 @@ services:
       caddy:
         condition: service_healthy
 
+  # cc-viz - Conversation Browser
+  # Dedicated visualization app for browsing Claude Code conversations
+  # Runs on port 8174
+  cc-viz:
+    image: node:20-alpine
+    container_name: cc-viz
+    working_dir: /app
+    command: sh -c "npm install -g pnpm && pnpm install && pnpm dev --host 0.0.0.0 --port 8174"
+    ports:
+      - "8174:8174"  # cc-viz port
+      - "24680:24680"  # Vite HMR websocket port
+    volumes:
+      - ./cc-viz:/app
+      - cc_viz_node_modules:/app/node_modules
+      - cc_viz_pnpm_store:/app/.pnpm-store
+    environment:
+      - VITE_API_URL=http://caddy:8000  # Use Docker network service name
+      - VITE_HMR_HOST=localhost
+      - VITE_HMR_PORT=24680
+      - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true
+      - NODE_OPTIONS=--max-old-space-size=2048
+    networks:
+      - proxy-network
+    stdin_open: true
+    tty: true
+    depends_on:
+      caddy:
+        condition: service_healthy
+
 networks:
   proxy-network:
     driver: bridge
@@ -170,3 +201,5 @@ volumes:
   web_pnpm_store:
   dashboard_node_modules:
   dashboard_pnpm_store:
+  cc_viz_node_modules:
+  cc_viz_pnpm_store:

@@ -4,7 +4,6 @@ import { Sidebar, GlobalDatePicker } from '@/components/layout'
 import { DateRangeProvider } from '@/lib/DateRangeContext'
 import { DashboardPage } from '@/pages/Dashboard'
 import { RequestsPage } from '@/pages/Requests'
-import { ConversationsPage } from '@/pages/Conversations'
 import { UsagePage } from '@/pages/Usage'
 import { PerformancePage } from '@/pages/Performance'
 import { RoutingPage } from '@/pages/Routing'
@@ -66,12 +65,6 @@ const requestsRoute = createRoute({
   component: RequestsPage,
 })
 
-const conversationsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/conversations',
-  component: ConversationsPage,
-})
-
 const usageRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/usage',
@@ -101,7 +94,6 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   dashboardRoute,
   requestsRoute,
-  conversationsRoute,
   usageRoute,
   performanceRoute,
   routingRoute,

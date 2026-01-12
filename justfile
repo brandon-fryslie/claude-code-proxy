@@ -9,6 +9,7 @@ install:
     cd proxy && go mod download
     cd web && pnpm install
     cd dashboard && pnpm install
+    cd cc-viz && pnpm install
 
 # Build everything (Go binaries + web assets)
 build:
@@ -17,6 +18,7 @@ build:
     cd proxy && go build -tags "fts5" -o ../bin/proxy-data cmd/proxy-data/main.go
     cd web && pnpm run build
     cd dashboard && pnpm run build
+    cd cc-viz && pnpm run build
     @echo "Done"
 
 # Run in development mode (Caddy + proxy-core + proxy-data + dashboards)
@@ -53,6 +55,7 @@ test:
 check:
     cd web && pnpm run typecheck && pnpm run lint
     cd dashboard && pnpm run lint
+    cd cc-viz && pnpm run lint
 
 # Reset database
 db:
@@ -61,6 +64,6 @@ db:
 
 # Clean all build artifacts and podman resources
 clean:
-    rm -rf bin/ web/build/ web/.cache/ dashboard/dist/
+    rm -rf bin/ web/build/ web/.cache/ dashboard/dist/ cc-viz/dist/
     podman-compose down -v 2>/dev/null || true
     @echo "Cleaned"
