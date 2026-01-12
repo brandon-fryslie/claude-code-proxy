@@ -31,6 +31,7 @@ const navSections: NavSection[] = [
     title: 'Overview',
     items: [
       { id: 'dashboard', label: 'Dashboard', icon: <Home size={18} /> },
+      { id: 'cc-viz', label: 'CC-VIZ', icon: <MessageSquare size={18} />, href: 'http://localhost:8174', external: true },
       { id: 'requests', label: 'Requests', icon: <Activity size={18} /> },
     ],
   },
@@ -40,12 +41,6 @@ const navSections: NavSection[] = [
       { id: 'usage', label: 'Token Usage', icon: <BarChart3 size={18} /> },
       { id: 'performance', label: 'Performance', icon: <Zap size={18} /> },
       { id: 'routing', label: 'Provider Routing', icon: <GitBranch size={18} /> },
-    ],
-  },
-  {
-    title: 'Tools',
-    items: [
-      { id: 'conversations', label: 'Conversations', icon: <MessageSquare size={18} />, href: 'http://localhost:8174', external: true },
     ],
   },
   {
