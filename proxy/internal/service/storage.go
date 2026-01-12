@@ -33,4 +33,7 @@ type StorageService interface {
 
 	// Conversation search
 	SearchConversations(opts model.SearchOptions) (*model.SearchResults, error)
+
+	// Indexed conversations - fast database lookup
+	GetIndexedConversations(limit int) ([]*model.IndexedConversation, error)
 }

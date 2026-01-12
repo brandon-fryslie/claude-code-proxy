@@ -12,6 +12,8 @@ export default defineConfig({
   },
   server: {
     port: 8173,
+    allowedHosts: true,
+    host: "0.0.0.0",
     proxy: {
       '/api': {
         // In Docker: use caddy service name. Locally: use localhost:8000

@@ -354,3 +354,13 @@ type ConversationMatch struct {
 	LastActivity   time.Time `json:"lastActivity"`
 }
 
+// IndexedConversation represents a conversation from the database index
+type IndexedConversation struct {
+	ID           string    `json:"id"`
+	ProjectPath  string    `json:"projectPath"`
+	ProjectName  string    `json:"projectName"`
+	StartTime    time.Time `json:"startTime"`
+	EndTime      time.Time `json:"lastActivity"`
+	MessageCount int       `json:"requestCount"`
+}
+

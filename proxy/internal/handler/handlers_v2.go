@@ -93,52 +93,23 @@ func (h *Handler) GetRequestByIDV2(w http.ResponseWriter, r *http.Request) {
 // Conversation Endpoints V2
 // ============================================================================
 
-// GetConversationsV2 returns array of conversations directly (not wrapped)
+// GetConversationsV2 returns array of conversations from the database index - fast!
 func (h *Handler) GetConversationsV2(w http.ResponseWriter, r *http.Request) {
-	conversations, err := h.conversationService.GetConversations()
+	// Use the fast database-backed method
+	conversations, err := h.storageService.GetIndexedConversations(100)
 	if err != nil {
-		log.Printf("❌ Error getting conversations: %v", err)
+		log.Printf("❌ Error getting indexed conversations: %v", err)
 		writeErrorResponse(w, "Failed to get conversations", http.StatusInternalServerError)
 		return
 	}
 
-	var allConversations []map[string]interface{}
-	for _, convs := range conversations {
-		for _, conv := range convs {
-			var firstMessage string
-			for _, msg := range conv.Messages {
-				if msg.Type == "user" {
-					text := extractTextFromMessage(msg.Message)
-					if text != "" {
-						firstMessage = text
-						if len(firstMessage) > 200 {
-							firstMessage = firstMessage[:200] + "..."
-						}
-						break
-					}
-				}
-			}
-
-			allConversations = append(allConversations, map[string]interface{}{
-				"id":           conv.SessionID,
-				"projectName":  conv.ProjectName,
-				"requestCount": conv.MessageCount,
-				"startTime":    conv.StartTime,
-				"lastActivity": conv.EndTime,
-				"duration":     conv.EndTime.Sub(conv.StartTime).Milliseconds(),
-				"firstMessage": firstMessage,
-			})
-		}
-	}
-
-	// Return empty array instead of null
-	if allConversations == nil {
+	if conversations == nil || len(conversations) == 0 {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte("[]"))
 		return
 	}
 
-	writeJSONResponse(w, allConversations)
+	writeJSONResponse(w, conversations)
 }
 
 // GetConversationByIDV2 returns conversation directly using session ID only

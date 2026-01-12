@@ -1,0 +1,43 @@
+Agent: iterative-implementer | 2026-01-11 06:15:00
+Mode: tdd
+Completed: Fixed all 3 failing Playwright tests | Files: 8 | Commits: 4
+Tests: 33 passing, 0 failing (100% pass rate)
+Cache invalidated: None needed (no planning/eval cache to invalidate)
+Status: complete
+
+Summary:
+--------
+Successfully fixed all failing Playwright e2e tests to achieve 100% pass rate (33/33 tests).
+
+Changes Made:
+1. Updated helpers.ts - replaced networkidle with domcontentloaded, added JSDoc
+2. Fixed 6 test files - replaced networkidle in all e2e test files
+3. Added aria-label to Sidebar collapse button - fixed accessibility test
+4. Updated TESTING.md - documented patterns and troubleshooting
+
+Root Causes Fixed:
+- networkidle timeouts: Dev environment has persistent network activity (Vite HMR, React Query)
+- Missing aria-label: Sidebar collapse button lacked accessibility label
+
+Test Execution Time: ~12-15 seconds (down from 30s+ timeouts)
+
+Validation:
+- All 33 tests pass consistently (verified 3 consecutive runs)
+- ESLint passes for all changed e2e files
+- Test execution time meets <2 minute goal
+
+Files Modified:
+- dashboard/e2e/helpers.ts
+- dashboard/e2e/accessibility.spec.ts
+- dashboard/e2e/usage.spec.ts
+- dashboard/e2e/dashboard.spec.ts
+- dashboard/e2e/navigation.spec.ts
+- dashboard/e2e/requests.spec.ts
+- dashboard/src/components/layout/Sidebar.tsx
+- dashboard/TESTING.md
+
+Commits:
+- 1d2ebcc0: test(dashboard): replace networkidle with domcontentloaded in all e2e tests
+- 4b334211: feat(dashboard): add aria-label to sidebar collapse button
+- 6fecb90b: fix(tests): remove unused variable in usage.spec.ts
+- 7ab05194: docs(dashboard): update TESTING.md to reflect 100% test pass rate
