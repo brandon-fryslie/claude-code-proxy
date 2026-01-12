@@ -266,6 +266,36 @@ export interface ConversationMessage {
   request?: RequestLog
 }
 
+// Database message format - includes full message data
+export interface DBConversationMessage {
+  uuid: string
+  conversationId: string
+  parentUuid?: string
+  type: string
+  role?: string
+  timestamp: string
+  cwd?: string
+  gitBranch?: string
+  sessionId?: string
+  agentId?: string
+  isSidechain?: boolean
+  requestId?: string
+  model?: string
+  inputTokens?: number
+  outputTokens?: number
+  cacheReadTokens?: number
+  cacheCreationTokens?: number
+  content?: any
+}
+
+export interface ConversationMessagesResponse {
+  conversationId: string
+  messages: DBConversationMessage[] | null
+  total: number
+  offset: number
+  limit: number
+}
+
 export interface ConversationDetail {
   sessionId: string
   projectName: string

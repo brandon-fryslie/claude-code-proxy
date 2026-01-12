@@ -17,6 +17,7 @@ import type {
   RoutingConfig,
   ProviderHealth,
   RoutingStatsResponse,
+  ConversationMessagesResponse,
 } from './types'
 
 // Use V2 API for cleaner responses
@@ -193,6 +194,23 @@ export function useConversationDetail(id: string | null) {
   return useQuery({
     queryKey: ['conversations', 'detail', id],
     queryFn: () => fetchAPI<ConversationDetail>(`/conversations/${id}`),
+    enabled: !!id,
+  })
+}
+
+// V2 API returns paginated messages from database
+export function useConversationMessages(
+  id: string | null,
+  options?: { limit?: number; offset?: number; includeSubagents?: boolean }
+) {
+  const queryString = buildQueryString({
+    limit: options?.limit || 100,
+    offset: options?.offset || 0,
+    include_subagents: options?.includeSubagents ? 'true' : undefined,
+  })
+  return useQuery({
+    queryKey: ['conversations', 'messages', id, options],
+    queryFn: () => fetchAPI<ConversationMessagesResponse>(`/conversations/${id}/messages${queryString}`),
     enabled: !!id,
   })
 }
