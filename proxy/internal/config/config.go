@@ -12,11 +12,11 @@ import (
 )
 
 type Config struct {
-	Server    ServerConfig               `yaml:"server"`
-	Providers map[string]*ProviderConfig `yaml:"providers"`
-	Storage   StorageConfig              `yaml:"storage"`
-	Subagents SubagentsConfig            `yaml:"subagents"`
-	Routing   RoutingConfig              `yaml:"routing"`
+	Server    ServerConfig               `yaml:"server" json:"server"`
+	Providers map[string]*ProviderConfig `yaml:"providers" json:"providers"`
+	Storage   StorageConfig              `yaml:"storage" json:"storage"`
+	Subagents SubagentsConfig            `yaml:"subagents" json:"subagents"`
+	Routing   RoutingConfig              `yaml:"routing" json:"routing"`
 }
 
 type ServerConfig struct {
@@ -36,58 +36,58 @@ type TimeoutsConfig struct {
 
 // ProviderConfig is the unified configuration for all providers
 type ProviderConfig struct {
-	Format           string `yaml:"format"`            // Required: "anthropic" or "openai"
-	BaseURL          string `yaml:"base_url"`          // Required: API base URL
-	APIKey           string `yaml:"api_key"`           // Optional: API key (required for some providers)
-	Version          string `yaml:"version"`           // Optional: API version (for Anthropic-format providers)
-	MaxRetries       int    `yaml:"max_retries"`       // Optional: Max retry attempts (default: 3)
-	FallbackProvider string `yaml:"fallback_provider"` // Optional: Provider to use when this one fails
-	CircuitBreaker   CircuitBreakerConfig `yaml:"circuit_breaker"` // Optional: Circuit breaker settings
+	Format           string `yaml:"format" json:"format"`                       // Required: "anthropic" or "openai"
+	BaseURL          string `yaml:"base_url" json:"base_url"`                   // Required: API base URL
+	APIKey           string `yaml:"api_key" json:"api_key,omitempty"`           // Optional: API key (required for some providers)
+	Version          string `yaml:"version" json:"version,omitempty"`           // Optional: API version (for Anthropic-format providers)
+	MaxRetries       int    `yaml:"max_retries" json:"max_retries"`             // Optional: Max retry attempts (default: 3)
+	FallbackProvider string `yaml:"fallback_provider" json:"fallback_provider,omitempty"` // Optional: Provider to use when this one fails
+	CircuitBreaker   CircuitBreakerConfig `yaml:"circuit_breaker" json:"circuit_breaker"` // Optional: Circuit breaker settings
 }
 
 // CircuitBreakerConfig holds circuit breaker configuration
 type CircuitBreakerConfig struct {
-	Enabled     bool   `yaml:"enabled"`      // Optional: Enable circuit breaker (default: true for providers with fallback)
-	MaxFailures int    `yaml:"max_failures"` // Optional: Failures before opening circuit (default: 5)
-	Timeout     string `yaml:"timeout"`      // Optional: Time before retry in half-open state (default: 30s)
+	Enabled     bool   `yaml:"enabled" json:"enabled"`           // Optional: Enable circuit breaker (default: true for providers with fallback)
+	MaxFailures int    `yaml:"max_failures" json:"max_failures"` // Optional: Failures before opening circuit (default: 5)
+	Timeout     string `yaml:"timeout" json:"timeout,omitempty"` // Optional: Time before retry in half-open state (default: 30s)
 
-	// Parsed timeout duration (not in YAML)
-	TimeoutDuration time.Duration `yaml:"-"`
+	// Parsed timeout duration (not in YAML or JSON)
+	TimeoutDuration time.Duration `yaml:"-" json:"-"`
 }
 
 type StorageConfig struct {
-	RequestsDir string `yaml:"requests_dir"`
-	DBPath      string `yaml:"db_path"`
+	RequestsDir string `yaml:"requests_dir" json:"requests_dir,omitempty"`
+	DBPath      string `yaml:"db_path" json:"db_path,omitempty"`
 }
 
 type SubagentsConfig struct {
-	Enable   bool              `yaml:"enable"`
-	Mappings map[string]string `yaml:"mappings"` // agentName -> "provider:model"
+	Enable   bool              `yaml:"enable" json:"enable"`
+	Mappings map[string]string `yaml:"mappings" json:"mappings"` // agentName -> "provider:model"
 }
 
 // RoutingConfig holds preference-based routing configuration
 type RoutingConfig struct {
-	Preferences      PreferencesConfig                 `yaml:"preferences"`
-	Tasks            map[string]TaskRoutingConfig      `yaml:"tasks"`
-	ProviderProfiles map[string]ProviderProfileConfig  `yaml:"provider_profiles"`
+	Preferences      PreferencesConfig                `yaml:"preferences" json:"preferences"`
+	Tasks            map[string]TaskRoutingConfig     `yaml:"tasks" json:"tasks"`
+	ProviderProfiles map[string]ProviderProfileConfig `yaml:"provider_profiles" json:"provider_profiles"`
 }
 
 // PreferencesConfig holds default routing preferences
 type PreferencesConfig struct {
-	Default string `yaml:"default"` // cost, speed, quality, balanced
+	Default string `yaml:"default" json:"default"` // cost, speed, quality, balanced
 }
 
 // TaskRoutingConfig defines routing for a specific task type
 type TaskRoutingConfig struct {
-	Preference string   `yaml:"preference"` // cost, speed, quality, balanced
-	Providers  []string `yaml:"providers"`  // Preferred providers for this task
+	Preference string   `yaml:"preference" json:"preference"` // cost, speed, quality, balanced
+	Providers  []string `yaml:"providers" json:"providers"`   // Preferred providers for this task
 }
 
 // ProviderProfileConfig describes provider characteristics
 type ProviderProfileConfig struct {
-	Speed   int `yaml:"speed"`   // 1-10 scale
-	Cost    int `yaml:"cost"`    // 1-10 scale
-	Quality int `yaml:"quality"` // 1-10 scale
+	Speed   int `yaml:"speed" json:"speed"`     // 1-10 scale
+	Cost    int `yaml:"cost" json:"cost"`       // 1-10 scale
+	Quality int `yaml:"quality" json:"quality"` // 1-10 scale
 }
 
 func Load() (*Config, error) {
