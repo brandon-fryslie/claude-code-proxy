@@ -1408,7 +1408,7 @@ func (h *DataHandler) GetTodosV2(w http.ResponseWriter, r *http.Request) {
 	query := `
 		SELECT 
 			COUNT(*) as total_files,
-			SUM(CASE WHEN todo_count > 0 THEN 1 ELSE 0 END) as non_empty_files,
+			COALESCE(SUM(CASE WHEN todo_count > 0 THEN 1 ELSE 0 END), 0) as non_empty_files,
 			COALESCE(SUM(pending_count), 0) as pending,
 			COALESCE(SUM(in_progress_count), 0) as in_progress,
 			COALESCE(SUM(completed_count), 0) as completed,
