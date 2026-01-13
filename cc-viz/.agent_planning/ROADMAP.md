@@ -5,11 +5,11 @@
 
 ---
 
-## Phase 1: Graph Foundation ✅ [COMPLETE - In Final Validation]
+## Phase 1: Graph Foundation ✅ [COMPLETE]
 
 **Goal**: Build the underlying infrastructure for interconnected data visualization. Establish database schema, indexing patterns, and relationship linking.
 
-**Status**: 2/4 completed | P0 & P1 verified, P2 performance validation in progress
+**Status**: 2/4 completed | P0, P1, P2 all verified and complete
 
 ### Topics
 
@@ -24,16 +24,24 @@
 
 #### ✅ conversation-indexer [COMPLETED]
 - **Epic**: CONVERSATION-INDEXER-1
-- **Status**: COMPLETE - P0, P1 Done, P2 Final Validation
+- **Status**: COMPLETE - P0, P1, P2 all verified
 - **Description**: Parse JSONL conversations, extract messages, tool calls, timestamps
 - **What's Done**:
   - ✅ P0: FTS5 blocker fixed (conditional build tags, all 24 tests passing)
   - ✅ P1: Integration tests with real data (102 files, 9,363 messages indexed)
-  - 🔄 P2: Performance validation on 3,927+ files (in progress)
-  - Parse ~/./claude/projects/{path}/{session}.jsonl
+  - ✅ P2: Performance validation complete (3,939 files, 284K messages, 3.36ms search)
+  - Parse ~/.claude/projects/{path}/{session}.jsonl
   - Extract and index tool calls (Read, Write, Bash, etc.)
   - Build timestamp correlations
   - Store in SQLite with FTS5 for search
+- **Performance Benchmarks** (P2 Results):
+  - Files indexed: 3,939/3,940 (99.97%)
+  - Messages: 284,238
+  - FTS entries: 250,742
+  - Database size: 1.0 GB
+  - Search latency: 3.36 ms
+  - Full index time: 4.89 min
+- **Storage Strategy**: See [ADR-001](ADR-001-storage-strategy.md)
 - **Reference**: `.agent_planning/cc-viz-phase1-foundation/`
 
 #### 💡 subagent-graph [PROPOSED]
@@ -245,19 +253,21 @@ Relationship Linker ←─────┘
 - **Full Vision**: [FEATURE_PROPOSAL_cc-viz-ultimate-vision.md](.agent_planning/FEATURE_PROPOSAL_cc-viz-ultimate-vision.md)
 - **Handoff**: [HANDOFF-cc-viz-ultimate-vision-20260112.md](.agent_planning/HANDOFF-cc-viz-ultimate-vision-20260112.md)
 - **Session Data Plan**: [PLAN-sprint2-20260112.md](.agent_planning/cc-viz-roadmap/PLAN-sprint2-20260112.md)
+- **Storage Strategy**: [ADR-001-storage-strategy.md](ADR-001-storage-strategy.md)
 
 ---
 
 ## Next Steps
 
-**Immediate (In Progress)**:
-1. ✅ Complete P2 performance validation (currently running)
-2. ✅ Verify all 3,927+ JSONL files index successfully
-3. ✅ Confirm database size and search performance within targets
+**Completed**:
+- ✅ P0: FTS5 blocker fixed
+- ✅ P1: Integration tests with real data
+- ✅ P2: Performance validation (3,939 files, 284K messages, 3.36ms search)
+- ✅ Storage strategy decided (see ADR-001)
 
-**After Phase 1 Complete**:
-1. Plan and implement **Phase 1c: Subagent Graph** (1-2 hours)
-2. Plan and implement **Phase 2: Unified Search** (4-6 hours)
+**Up Next**:
+1. Plan and implement **Phase 1c: Subagent Graph**
+2. Plan and implement **Phase 2: Unified Search**
 3. Begin **Phase 3: User Features** (Time Machine, Activity Dashboard, etc.)
 
 **Tracking**:

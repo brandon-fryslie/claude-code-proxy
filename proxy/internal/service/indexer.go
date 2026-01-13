@@ -430,3 +430,65 @@ func (ci *ConversationIndexer) processIndexQueue() {
 		}
 	}
 }
+
+// IndexBenchmarkStats contains statistics from a full indexing run
+type IndexBenchmarkStats struct {
+	Duration          time.Duration
+	FilesFound        int
+	FilesIndexed      int
+	ErrorCount        int
+	ConversationCount int
+	MessageCount      int
+	FTSEntriesCount   int
+}
+
+// RunFullIndexBenchmark runs a complete indexing pass and returns statistics
+// This is a synchronous version of initialIndex() designed for benchmarking
+func (ci *ConversationIndexer) RunFullIndexBenchmark() (*IndexBenchmarkStats, error) {
+	stats := &IndexBenchmarkStats{}
+	startTime := time.Now()
+
+	err := filepath.Walk(ci.claudeProjects, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // Continue walking
+		}
+
+		if !strings.HasSuffix(path, ".jsonl") {
+			return nil
+		}
+
+		stats.FilesFound++
+
+		// Always index for benchmark (ignore needsIndexing check)
+		if err := ci.indexFile(path); err != nil {
+			stats.ErrorCount++
+		} else {
+			stats.FilesIndexed++
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to walk Claude projects: %w", err)
+	}
+
+	stats.Duration = time.Since(startTime)
+
+	// Query final counts
+	ci.storage.db.QueryRow("SELECT COUNT(*) FROM conversations").Scan(&stats.ConversationCount)
+	ci.storage.db.QueryRow("SELECT COUNT(*) FROM conversation_messages").Scan(&stats.MessageCount)
+
+	if fts5Enabled() {
+		ci.storage.db.QueryRow("SELECT COUNT(*) FROM conversations_fts").Scan(&stats.FTSEntriesCount)
+	} else {
+		stats.FTSEntriesCount = -1
+	}
+
+	return stats, nil
+}
+
+// DB returns the underlying database connection for benchmarking access
+func (ci *ConversationIndexer) DB() *sql.DB {
+	return ci.storage.db
+}
