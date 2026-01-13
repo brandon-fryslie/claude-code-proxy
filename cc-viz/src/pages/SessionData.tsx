@@ -173,11 +173,20 @@ export default function SessionData() {
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
-                          <div className="font-mono text-sm text-gray-900">
-                            {truncateUuid(session.session_uuid)}
-                            {session.agent_uuid !== session.session_uuid && (
-                              <span className="text-gray-400 ml-1">/{truncateUuid(session.agent_uuid)}</span>
-                            )}
+                          <div className="font-mono text-sm text-gray-900 flex items-center gap-2">
+                            <span
+                              className="w-2 h-2 rounded-full flex-shrink-0"
+                              style={{
+                                backgroundColor: session.completed_count === session.todo_count && session.todo_count > 0
+                                  ? '#22c55e' // green - all done
+                                  : session.in_progress_count > 0
+                                  ? '#3b82f6' // blue - in progress
+                                  : session.todo_count === 0
+                                  ? '#9ca3af' // gray - empty
+                                  : '#f59e0b' // amber - has pending
+                              }}
+                            />
+                            {truncateUuid(session.file_path.split('/').pop()?.replace('.json', '') || '')}
                           </div>
                           <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
                             <span>{session.todo_count} todos</span>
