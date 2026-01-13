@@ -61,7 +61,7 @@ const navSections: NavSection[] = [
   {
     title: 'Data',
     items: [
-      { id: 'session-data', label: 'Session Data', icon: <FileText size={18} />, disabled: true },
+      { id: 'session-data', label: 'Session Data', icon: <FileText size={18} />, href: "/cc-viz/session-data" },
       { id: 'history', label: 'History', icon: <History size={18} />, disabled: true },
       { id: 'telemetry', label: 'Telemetry & Stats', icon: <BarChart3 size={18} />, disabled: true },
     ],

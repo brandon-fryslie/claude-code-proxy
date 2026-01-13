@@ -91,7 +91,8 @@ const categories: CategoryCard[] = [
     description: 'Debug logs, todos, plans, and session environment data',
     icon: <FileText size={24} />,
     items: ['debug/ logs', 'todos/ states', 'plans/', 'session-env/'],
-    status: 'coming-soon',
+    status: 'available',
+    href: '/cc-viz/session-data',
   },
   {
     id: 'history',

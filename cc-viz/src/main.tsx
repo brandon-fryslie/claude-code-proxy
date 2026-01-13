@@ -5,6 +5,7 @@ import { ConversationsPage } from './pages/Conversations'
 import { HomePage } from './pages/Home'
 import { ConfigurationPage } from './pages/Configuration'
 import { ProjectsPage } from './pages/Projects'
+import SessionDataPage from './pages/SessionData'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -30,6 +31,9 @@ function App() {
   }
   if (path === '/cc-viz/projects' || path === '/cc-viz/projects/') {
     return <ProjectsPage />
+  }
+  if (path === '/cc-viz/session-data' || path === '/cc-viz/session-data/') {
+    return <SessionDataPage />
   }
 
   // Default to home page for /cc-viz/ or /cc-viz
