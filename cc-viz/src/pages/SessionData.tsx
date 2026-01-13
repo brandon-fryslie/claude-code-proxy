@@ -186,7 +186,10 @@ export default function SessionData() {
                                   : '#f59e0b' // amber - has pending
                               }}
                             />
-                            {truncateUuid(session.file_path.split('/').pop()?.replace('.json', '') || '')}
+                            <span>{truncateUuid(session.session_uuid)}</span>
+                            {session.agent_uuid !== session.session_uuid && (
+                              <span className="text-gray-500">/ {truncateUuid(session.agent_uuid)}</span>
+                            )}
                           </div>
                           <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
                             <span>{session.todo_count} todos</span>
