@@ -202,24 +202,31 @@ func (ci *ConversationIndexer) indexFile(filePath string) error {
 	}
 
 	// Delete existing entries for this conversation
-	_, err = tx.Exec("DELETE FROM conversations_fts WHERE conversation_id = ?", conv.SessionID)
-	if err != nil {
-		return fmt.Errorf("failed to delete old FTS entries: %w", err)
+	// Only delete FTS entries if FTS5 is enabled
+	if fts5Enabled() {
+		_, err = tx.Exec("DELETE FROM conversations_fts WHERE conversation_id = ?", conv.SessionID)
+		if err != nil {
+			return fmt.Errorf("failed to delete old FTS entries: %w", err)
+		}
 	}
+
 	_, err = tx.Exec("DELETE FROM conversation_messages WHERE conversation_id = ?", conv.SessionID)
 	if err != nil {
 		return fmt.Errorf("failed to delete old message entries: %w", err)
 	}
 
-	// Prepare FTS insert statement
-	ftsStmt, err := tx.Prepare(`
-		INSERT INTO conversations_fts (conversation_id, message_uuid, message_type, content_text, tool_names, timestamp)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`)
-	if err != nil {
-		return fmt.Errorf("failed to prepare FTS insert statement: %w", err)
+	// Prepare FTS insert statement only if FTS5 is enabled
+	var ftsStmt *sql.Stmt
+	if fts5Enabled() {
+		ftsStmt, err = tx.Prepare(`
+			INSERT INTO conversations_fts (conversation_id, message_uuid, message_type, content_text, tool_names, timestamp)
+			VALUES (?, ?, ?, ?, ?, ?)
+		`)
+		if err != nil {
+			return fmt.Errorf("failed to prepare FTS insert statement: %w", err)
+		}
+		defer ftsStmt.Close()
 	}
-	defer ftsStmt.Close()
 
 	// Prepare full message insert statement (use INSERT OR REPLACE to handle duplicate UUIDs)
 	msgStmt, err := tx.Prepare(`
@@ -240,8 +247,8 @@ func (ci *ConversationIndexer) indexFile(filePath string) error {
 		text, toolNames, _ := ExtractMessageContent(msg)
 		toolNamesStr := strings.Join(toolNames, " ")
 
-		// Insert into FTS if there's content
-		if text != "" || len(toolNames) > 0 {
+		// Insert into FTS if there's content and FTS5 is enabled
+		if fts5Enabled() && (text != "" || len(toolNames) > 0) {
 			_, err = ftsStmt.Exec(
 				conv.SessionID,
 				msg.UUID,
@@ -392,9 +399,12 @@ func (ci *ConversationIndexer) removeConversation(filePath string) {
 	}
 	// FTS entries are deleted via CASCADE or we can do it explicitly
 	// For now, assume we need to do it explicitly since FTS tables don't support CASCADE
-	sessionID, err := ci.getSessionIDFromPath(filePath)
-	if err == nil {
-		ci.storage.db.Exec("DELETE FROM conversations_fts WHERE conversation_id = ?", sessionID)
+	// Only delete FTS entries if FTS5 is enabled
+	if fts5Enabled() {
+		sessionID, err := ci.getSessionIDFromPath(filePath)
+		if err == nil {
+			ci.storage.db.Exec("DELETE FROM conversations_fts WHERE conversation_id = ?", sessionID)
+		}
 	}
 }
 

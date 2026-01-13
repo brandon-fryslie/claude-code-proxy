@@ -11,6 +11,12 @@ import (
 )
 
 func TestSearchConversations(t *testing.T) {
+	// Skip this test if FTS5 is not available (test build)
+	if !fts5Enabled() {
+		t.Skip("Skipping FTS5 search test - FTS5 not available in test build")
+		return
+	}
+
 	// Create a temporary directory for test data
 	tmpDir, err := os.MkdirTemp("", "search-test")
 	if err != nil {

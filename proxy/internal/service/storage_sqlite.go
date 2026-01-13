@@ -173,32 +173,9 @@ func (s *SQLiteStorageService) runConversationSearchMigrations() error {
 		log.Println("✅ Created conversations table")
 	}
 
-	// Check if FTS5 table exists
-	var ftsExists int
-	err = s.db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='conversations_fts'").Scan(&ftsExists)
-	if err != nil {
-		return fmt.Errorf("failed to check if FTS table exists: %w", err)
-	}
-
-	if ftsExists == 0 {
-		// Create FTS5 virtual table
-		ftsSchema := `
-		CREATE VIRTUAL TABLE conversations_fts USING fts5(
-			conversation_id UNINDEXED,
-			message_uuid UNINDEXED,
-			message_type,
-			content_text,
-			tool_names,
-			timestamp UNINDEXED,
-			tokenize='porter unicode61'
-		);
-		`
-
-		if _, err := s.db.Exec(ftsSchema); err != nil {
-			return fmt.Errorf("failed to create FTS table: %w", err)
-		}
-
-		log.Println("✅ Created conversations_fts FTS5 table")
+	// Create FTS5 table using build-tag conditional function
+	if err := createFTS5Table(s.db); err != nil {
+		return err
 	}
 
 	// Check if conversation_messages table exists
@@ -1429,7 +1406,7 @@ func percentileInt64(sorted []int64, p int) int64 {
 	return sorted[idx]
 }
 
-// SearchConversations performs FTS5 search on conversation content
+// SearchConversations performs FTS5 search on conversation content (with fallback for test mode)
 func (s *SQLiteStorageService) SearchConversations(opts model.SearchOptions) (*model.SearchResults, error) {
 	// Build FTS5 query - convert user input to OR logic for multi-term searches
 	terms := strings.Fields(opts.Query)
@@ -1441,6 +1418,12 @@ func (s *SQLiteStorageService) SearchConversations(opts model.SearchOptions) (*m
 			Limit:   opts.Limit,
 			Offset:  opts.Offset,
 		}, nil
+	}
+
+	// Check if FTS5 is available
+	if !fts5Enabled() {
+		// Fallback to LIKE-based search for test builds
+		return s.searchConversationsLike(opts, terms)
 	}
 
 	// Escape FTS5 special characters and build OR query
@@ -1496,6 +1479,104 @@ func (s *SQLiteStorageService) SearchConversations(opts model.SearchOptions) (*m
 	args = append(args, opts.Limit, opts.Offset)
 
 	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query conversations: %w", err)
+	}
+	defer rows.Close()
+
+	results := make([]*model.ConversationMatch, 0)
+	for rows.Next() {
+		var match model.ConversationMatch
+		var lastActivity sql.NullString
+
+		if err := rows.Scan(
+			&match.ConversationID,
+			&match.ProjectName,
+			&match.ProjectPath,
+			&lastActivity,
+			&match.MatchCount,
+		); err != nil {
+			continue
+		}
+
+		if lastActivity.Valid {
+			if t, err := time.Parse(time.RFC3339, lastActivity.String); err == nil {
+				match.LastActivity = t
+			}
+		}
+
+		results = append(results, &match)
+	}
+
+	return &model.SearchResults{
+		Query:   opts.Query,
+		Results: results,
+		Total:   total,
+		Limit:   opts.Limit,
+		Offset:  opts.Offset,
+	}, nil
+}
+
+// searchConversationsLike is a fallback for test builds without FTS5
+func (s *SQLiteStorageService) searchConversationsLike(opts model.SearchOptions, terms []string) (*model.SearchResults, error) {
+	// Build LIKE-based query for each term
+	whereClauses := []string{}
+	args := []interface{}{}
+
+	for _, term := range terms {
+		whereClauses = append(whereClauses, "(cm.content_json LIKE ? OR cm.tool_use_json LIKE ?)")
+		likePattern := "%" + term + "%"
+		args = append(args, likePattern, likePattern)
+	}
+
+	whereClause := strings.Join(whereClauses, " OR ")
+
+	// Count query
+	countQuery := fmt.Sprintf(`
+		SELECT COUNT(DISTINCT c.id)
+		FROM conversations c
+		JOIN conversation_messages cm ON c.id = cm.conversation_id
+		WHERE %s
+	`, whereClause)
+
+	if opts.ProjectPath != "" {
+		countQuery += " AND c.project_path = ?"
+		args = append(args, opts.ProjectPath)
+	}
+
+	var total int
+	if err := s.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return nil, fmt.Errorf("failed to get total count: %w", err)
+	}
+
+	// Main query with pagination
+	query := fmt.Sprintf(`
+		SELECT
+			c.id AS conversation_id,
+			c.project_name,
+			c.project_path,
+			c.end_time AS last_activity,
+			COUNT(cm.uuid) AS match_count
+		FROM conversations c
+		JOIN conversation_messages cm ON c.id = cm.conversation_id
+		WHERE %s
+	`, whereClause)
+
+	queryArgs := make([]interface{}, len(args))
+	copy(queryArgs, args)
+
+	if opts.ProjectPath != "" {
+		query += " AND c.project_path = ?"
+	}
+
+	query += `
+		GROUP BY c.id
+		ORDER BY match_count DESC, c.end_time DESC
+		LIMIT ? OFFSET ?
+	`
+	queryArgs = append(queryArgs, opts.Limit, opts.Offset)
+
+	rows, err := s.db.Query(query, queryArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query conversations: %w", err)
 	}
