@@ -1823,3 +1823,8 @@ func (s *SQLiteStorageService) ReindexConversations() error {
 	log.Println("🔄 Cleared indexed_at timestamps - conversations will be re-indexed")
 	return nil
 }
+
+// GetDB returns the underlying database connection for internal package use only
+func (s *SQLiteStorageService) GetDB() *sql.DB {
+	return s.db
+}

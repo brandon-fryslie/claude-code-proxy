@@ -1,12 +1,15 @@
 package handler
 
 import (
+	"database/sql"
 	"encoding/json"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -968,4 +971,772 @@ func (h *DataHandler) GetSubagentConfigV2(w http.ResponseWriter, r *http.Request
 	}
 
 	writeJSONResponse(w, subagentConfig)
+}
+
+// ============================================================================
+// CC-VIZ Claude Directory Endpoints
+// ============================================================================
+
+// GetClaudeConfigV2 returns the user's ~/.claude configuration files
+func (h *DataHandler) GetClaudeConfigV2(w http.ResponseWriter, r *http.Request) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		writeErrorResponse(w, "Could not determine home directory", http.StatusInternalServerError)
+		return
+	}
+	claudeDir := filepath.Join(homeDir, ".claude")
+
+	response := make(map[string]interface{})
+
+	// Read settings.json
+	settingsPath := filepath.Join(claudeDir, "settings.json")
+	if settingsData, err := os.ReadFile(settingsPath); err == nil {
+		var settings map[string]interface{}
+		if err := json.Unmarshal(settingsData, &settings); err == nil {
+			// Parse permissions into groups
+			permissions := parsePermissions(settings)
+			plugins := parsePlugins(settings)
+
+			response["settings"] = map[string]interface{}{
+				"model":        settings["model"],
+				"default_mode": getNestedString(settings, "permissions", "defaultMode"),
+				"permissions":  permissions,
+				"plugins":      plugins,
+				"raw":          settings,
+			}
+		}
+	} else {
+		response["settings"] = nil
+		response["settings_error"] = "File not found or not readable"
+	}
+
+	// Read CLAUDE.md (follow symlinks automatically via ReadFile)
+	claudeMdPath := filepath.Join(claudeDir, "CLAUDE.md")
+	if claudeMdData, err := os.ReadFile(claudeMdPath); err == nil {
+		claudeMdContent := string(claudeMdData)
+		sections := parseClaudeMdSections(claudeMdContent)
+		response["claude_md"] = map[string]interface{}{
+			"content":  claudeMdContent,
+			"sections": sections,
+		}
+	} else {
+		response["claude_md"] = nil
+		response["claude_md_error"] = "File not found or not readable"
+	}
+
+	// Read .mcp.json
+	mcpPath := filepath.Join(claudeDir, ".mcp.json")
+	if mcpData, err := os.ReadFile(mcpPath); err == nil {
+		var mcpConfig map[string]interface{}
+		if err := json.Unmarshal(mcpData, &mcpConfig); err == nil {
+			servers := parseMCPServers(mcpConfig)
+			response["mcp_config"] = map[string]interface{}{
+				"servers": servers,
+				"raw":     mcpConfig,
+			}
+		}
+	} else {
+		response["mcp_config"] = nil
+		response["mcp_config_error"] = "File not found or not readable"
+	}
+
+	writeJSONResponse(w, response)
+}
+
+// GetClaudeProjectsV2 returns a list of all projects in ~/.claude/projects/
+func (h *DataHandler) GetClaudeProjectsV2(w http.ResponseWriter, r *http.Request) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		writeErrorResponse(w, "Could not determine home directory", http.StatusInternalServerError)
+		return
+	}
+	projectsDir := filepath.Join(homeDir, ".claude", "projects")
+
+	entries, err := os.ReadDir(projectsDir)
+	if err != nil {
+		writeErrorResponse(w, "Could not read projects directory", http.StatusInternalServerError)
+		return
+	}
+
+	var projects []map[string]interface{}
+	var totalSize int64
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		projectPath := filepath.Join(projectsDir, entry.Name())
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		// Decode path: "-Users-bmf-code-foo" -> "/Users/bmf/code/foo"
+		decodedPath := strings.ReplaceAll(entry.Name(), "-", "/")
+
+		// Calculate stats for this project
+		fileCount, dirSize, sessionCount, agentCount, lastModified := calculateProjectStats(projectPath)
+		totalSize += dirSize
+
+		// Extract short project name from decoded path
+		projectName := filepath.Base(decodedPath)
+
+		projects = append(projects, map[string]interface{}{
+			"id":            entry.Name(),
+			"path":          decodedPath,
+			"name":          projectName,
+			"file_count":    fileCount,
+			"total_size":    dirSize,
+			"session_count": sessionCount,
+			"agent_count":   agentCount,
+			"last_modified": lastModified,
+			"created":       info.ModTime(),
+		})
+	}
+
+	// Sort by last_modified descending
+	sort.Slice(projects, func(i, j int) bool {
+		ti, _ := projects[i]["last_modified"].(time.Time)
+		tj, _ := projects[j]["last_modified"].(time.Time)
+		return ti.After(tj)
+	})
+
+	response := map[string]interface{}{
+		"projects":    projects,
+		"total_count": len(projects),
+		"total_size":  totalSize,
+	}
+
+	writeJSONResponse(w, response)
+}
+
+// GetClaudeProjectDetailV2 returns detailed info about a specific project
+func (h *DataHandler) GetClaudeProjectDetailV2(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	projectID := vars["id"]
+
+	if projectID == "" {
+		writeErrorResponse(w, "Project ID is required", http.StatusBadRequest)
+		return
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		writeErrorResponse(w, "Could not determine home directory", http.StatusInternalServerError)
+		return
+	}
+	projectPath := filepath.Join(homeDir, ".claude", "projects", projectID)
+
+	// Check if project exists
+	if _, err := os.Stat(projectPath); os.IsNotExist(err) {
+		writeErrorResponse(w, "Project not found", http.StatusNotFound)
+		return
+	}
+
+	// Decode path
+	decodedPath := strings.ReplaceAll(projectID, "-", "/")
+
+	// Get detailed stats
+	fileCount, totalSize, sessionCount, agentCount, lastModified := calculateProjectStats(projectPath)
+
+	// Get list of sessions with details
+	sessions := getProjectSessions(projectPath)
+
+	// Calculate size breakdown
+	var sessionSize, agentSize int64
+	for _, session := range sessions {
+		if isAgent, _ := session["is_agent"].(bool); isAgent {
+			agentSize += session["size"].(int64)
+		} else {
+			sessionSize += session["size"].(int64)
+		}
+	}
+
+	response := map[string]interface{}{
+		"id":            projectID,
+		"path":          decodedPath,
+		"name":          filepath.Base(decodedPath),
+		"file_count":    fileCount,
+		"total_size":    totalSize,
+		"session_count": sessionCount,
+		"agent_count":   agentCount,
+		"last_modified": lastModified,
+		"sessions":      sessions,
+		"size_breakdown": map[string]interface{}{
+			"sessions": sessionSize,
+			"agents":   agentSize,
+		},
+	}
+
+	writeJSONResponse(w, response)
+}
+
+// Helper functions for Claude config parsing
+
+func parsePermissions(settings map[string]interface{}) map[string][]string {
+	result := map[string][]string{
+		"bash":  {},
+		"tools": {},
+		"mcp":   {},
+		"other": {},
+	}
+
+	permissions, ok := settings["permissions"].(map[string]interface{})
+	if !ok {
+		return result
+	}
+
+	allow, ok := permissions["allow"].([]interface{})
+	if !ok {
+		return result
+	}
+
+	for _, p := range allow {
+		perm, ok := p.(string)
+		if !ok {
+			continue
+		}
+
+		if strings.HasPrefix(perm, "Bash(") {
+			// Extract just the command part: "Bash(git:*)" -> "git:*"
+			inner := strings.TrimPrefix(perm, "Bash(")
+			inner = strings.TrimSuffix(inner, ")")
+			result["bash"] = append(result["bash"], inner)
+		} else if strings.HasPrefix(perm, "mcp__") || strings.Contains(perm, "mcp") {
+			result["mcp"] = append(result["mcp"], perm)
+		} else if strings.Contains(perm, "(") {
+			// Tool permissions like "Edit(*)", "Read(*)"
+			result["tools"] = append(result["tools"], perm)
+		} else {
+			result["other"] = append(result["other"], perm)
+		}
+	}
+
+	return result
+}
+
+func parsePlugins(settings map[string]interface{}) map[string][]string {
+	result := map[string][]string{
+		"enabled":  {},
+		"disabled": {},
+	}
+
+	plugins, ok := settings["enabledPlugins"].(map[string]interface{})
+	if !ok {
+		return result
+	}
+
+	for name, enabled := range plugins {
+		if isEnabled, ok := enabled.(bool); ok && isEnabled {
+			result["enabled"] = append(result["enabled"], name)
+		} else {
+			result["disabled"] = append(result["disabled"], name)
+		}
+	}
+
+	// Sort for consistent output
+	sort.Strings(result["enabled"])
+	sort.Strings(result["disabled"])
+
+	return result
+}
+
+func parseClaudeMdSections(content string) []map[string]interface{} {
+	var sections []map[string]interface{}
+
+	// Look for XML-like tags that are commonly used
+	tags := []string{"system-reminder", "memory", "personal-note", "universal-laws", "guidelines", "context-specific"}
+
+	for _, tag := range tags {
+		openTag := "<" + tag + ">"
+		if strings.Contains(content, openTag) {
+			// Find approximate position
+			idx := strings.Index(content, openTag)
+			sections = append(sections, map[string]interface{}{
+				"name":     tag,
+				"position": idx,
+			})
+		}
+	}
+
+	// Sort by position
+	sort.Slice(sections, func(i, j int) bool {
+		pi, _ := sections[i]["position"].(int)
+		pj, _ := sections[j]["position"].(int)
+		return pi < pj
+	})
+
+	return sections
+}
+
+func parseMCPServers(mcpConfig map[string]interface{}) []map[string]interface{} {
+	var servers []map[string]interface{}
+
+	serversMap, ok := mcpConfig["mcpServers"].(map[string]interface{})
+	if !ok {
+		return servers
+	}
+
+	for name, config := range serversMap {
+		serverConfig, ok := config.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		server := map[string]interface{}{
+			"name":    name,
+			"command": serverConfig["command"],
+			"type":    serverConfig["type"],
+		}
+
+		if args, ok := serverConfig["args"].([]interface{}); ok {
+			server["args"] = args
+		}
+
+		servers = append(servers, server)
+	}
+
+	return servers
+}
+
+func getNestedString(m map[string]interface{}, keys ...string) string {
+	current := m
+	for i, key := range keys {
+		if i == len(keys)-1 {
+			if val, ok := current[key].(string); ok {
+				return val
+			}
+			return ""
+		}
+		if next, ok := current[key].(map[string]interface{}); ok {
+			current = next
+		} else {
+			return ""
+		}
+	}
+	return ""
+}
+
+func calculateProjectStats(projectPath string) (fileCount int, totalSize int64, sessionCount int, agentCount int, lastModified time.Time) {
+	entries, err := os.ReadDir(projectPath)
+	if err != nil {
+		return
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			// Subdirectories are subagent conversations
+			continue
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		fileCount++
+		totalSize += info.Size()
+
+		if info.ModTime().After(lastModified) {
+			lastModified = info.ModTime()
+		}
+
+		name := entry.Name()
+		if strings.HasPrefix(name, "agent-") {
+			agentCount++
+		} else if strings.HasSuffix(name, ".jsonl") {
+			sessionCount++
+		}
+	}
+
+	return
+}
+
+func getProjectSessions(projectPath string) []map[string]interface{} {
+	var sessions []map[string]interface{}
+
+	entries, err := os.ReadDir(projectPath)
+	if err != nil {
+		return sessions
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".jsonl") {
+			continue
+		}
+
+		isAgent := strings.HasPrefix(name, "agent-")
+		sessionID := strings.TrimSuffix(name, ".jsonl")
+
+		sessions = append(sessions, map[string]interface{}{
+			"id":        sessionID,
+			"file":      name,
+			"size":      info.Size(),
+			"modified":  info.ModTime(),
+			"is_agent":  isAgent,
+		})
+	}
+
+	// Sort by modified time descending
+	sort.Slice(sessions, func(i, j int) bool {
+		ti, _ := sessions[i]["modified"].(time.Time)
+		tj, _ := sessions[j]["modified"].(time.Time)
+		return ti.After(tj)
+	})
+
+	return sessions
+}
+
+// ============================================================================
+// CC-VIZ Session Data Endpoints
+// ============================================================================
+
+// GetTodosV2 returns aggregated todo stats and session list from database
+func (h *DataHandler) GetTodosV2(w http.ResponseWriter, r *http.Request) {
+	// Query database for aggregated stats
+	query := `
+		SELECT 
+			COUNT(*) as total_files,
+			SUM(CASE WHEN todo_count > 0 THEN 1 ELSE 0 END) as non_empty_files,
+			COALESCE(SUM(pending_count), 0) as pending,
+			COALESCE(SUM(in_progress_count), 0) as in_progress,
+			COALESCE(SUM(completed_count), 0) as completed,
+			MAX(indexed_at) as last_indexed
+		FROM claude_todo_sessions
+	`
+
+	storage, ok := h.storageService.(*service.SQLiteStorageService)
+	if !ok {
+		writeErrorResponse(w, "Storage service not available", http.StatusInternalServerError)
+		return
+	}
+
+	var totalFiles, nonEmptyFiles, pending, inProgress, completed int
+	var lastIndexed sql.NullString
+
+	err := storage.GetDB().QueryRow(query).Scan(
+		&totalFiles,
+		&nonEmptyFiles,
+		&pending,
+		&inProgress,
+		&completed,
+		&lastIndexed,
+	)
+	if err != nil {
+		log.Printf("Error querying todo stats: %v", err)
+		writeErrorResponse(w, "Failed to query todo stats", http.StatusInternalServerError)
+		return
+	}
+
+	// Query sessions
+	sessionsQuery := `
+		SELECT session_uuid, agent_uuid, file_path, file_size, todo_count,
+		       pending_count, in_progress_count, completed_count, modified_at
+		FROM claude_todo_sessions
+		ORDER BY modified_at DESC
+	`
+
+	rows, err := storage.GetDB().Query(sessionsQuery)
+	if err != nil {
+		log.Printf("Error querying todo sessions: %v", err)
+		writeErrorResponse(w, "Failed to query todo sessions", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var sessions []map[string]interface{}
+	for rows.Next() {
+		var sessionUUID, agentUUID, filePath, modifiedAt string
+		var fileSize, todoCount, pendingCount, inProgressCount, completedCount int
+
+		err := rows.Scan(
+			&sessionUUID,
+			&agentUUID,
+			&filePath,
+			&fileSize,
+			&todoCount,
+			&pendingCount,
+			&inProgressCount,
+			&completedCount,
+			&modifiedAt,
+		)
+		if err != nil {
+			continue
+		}
+
+		sessions = append(sessions, map[string]interface{}{
+			"session_uuid":       sessionUUID,
+			"agent_uuid":         agentUUID,
+			"file_path":          filePath,
+			"file_size":          fileSize,
+			"todo_count":         todoCount,
+			"pending_count":      pendingCount,
+			"in_progress_count":  inProgressCount,
+			"completed_count":    completedCount,
+			"modified_at":        modifiedAt,
+		})
+	}
+
+	response := map[string]interface{}{
+		"total_files":      totalFiles,
+		"non_empty_files":  nonEmptyFiles,
+		"status_breakdown": map[string]int{
+			"pending":     pending,
+			"in_progress": inProgress,
+			"completed":   completed,
+		},
+		"sessions":     sessions,
+		"last_indexed": lastIndexed.String,
+	}
+
+	writeJSONResponse(w, response)
+}
+
+// GetTodoDetailV2 returns todos for a specific session from database
+func (h *DataHandler) GetTodoDetailV2(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	sessionUUID := vars["session_uuid"]
+
+	if sessionUUID == "" {
+		writeErrorResponse(w, "Session UUID is required", http.StatusBadRequest)
+		return
+	}
+
+	storage, ok := h.storageService.(*service.SQLiteStorageService)
+	if !ok {
+		writeErrorResponse(w, "Storage service not available", http.StatusInternalServerError)
+		return
+	}
+
+	// Query todos for this session
+	query := `
+		SELECT content, status, active_form
+		FROM claude_todos
+		WHERE session_uuid = ?
+		ORDER BY item_index ASC
+	`
+
+	rows, err := storage.GetDB().Query(query, sessionUUID)
+	if err != nil {
+		log.Printf("Error querying todos for session %s: %v", sessionUUID, err)
+		writeErrorResponse(w, "Failed to query todos", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var todos []map[string]interface{}
+	for rows.Next() {
+		var content, status, activeForm string
+		err := rows.Scan(&content, &status, &activeForm)
+		if err != nil {
+			continue
+		}
+
+		todos = append(todos, map[string]interface{}{
+			"content":     content,
+			"status":      status,
+			"active_form": activeForm,
+		})
+	}
+
+	if len(todos) == 0 {
+		writeErrorResponse(w, "Session not found", http.StatusNotFound)
+		return
+	}
+
+	// Get session metadata
+	var agentUUID, filePath, modifiedAt string
+	sessionQuery := `
+		SELECT agent_uuid, file_path, modified_at
+		FROM claude_todo_sessions
+		WHERE session_uuid = ?
+	`
+	err = storage.GetDB().QueryRow(sessionQuery, sessionUUID).Scan(&agentUUID, &filePath, &modifiedAt)
+	if err != nil {
+		log.Printf("Error querying session metadata: %v", err)
+	}
+
+	response := map[string]interface{}{
+		"session_uuid": sessionUUID,
+		"agent_uuid":   agentUUID,
+		"file_path":    filePath,
+		"modified_at":  modifiedAt,
+		"todos":        todos,
+	}
+
+	writeJSONResponse(w, response)
+}
+
+// GetPlansV2 returns all plans from database
+func (h *DataHandler) GetPlansV2(w http.ResponseWriter, r *http.Request) {
+	storage, ok := h.storageService.(*service.SQLiteStorageService)
+	if !ok {
+		writeErrorResponse(w, "Storage service not available", http.StatusInternalServerError)
+		return
+	}
+
+	// Get aggregated stats
+	statsQuery := `
+		SELECT COUNT(*) as count, COALESCE(SUM(file_size), 0) as total_size, MAX(indexed_at) as last_indexed
+		FROM claude_plans
+	`
+
+	var count int
+	var totalSize int64
+	var lastIndexed sql.NullString
+	err := storage.GetDB().QueryRow(statsQuery).Scan(&count, &totalSize, &lastIndexed)
+	if err != nil {
+		log.Printf("Error querying plan stats: %v", err)
+		writeErrorResponse(w, "Failed to query plan stats", http.StatusInternalServerError)
+		return
+	}
+
+	// Query all plans
+	plansQuery := `
+		SELECT id, file_name, display_name, preview, file_size, modified_at
+		FROM claude_plans
+		ORDER BY modified_at DESC
+	`
+
+	rows, err := storage.GetDB().Query(plansQuery)
+	if err != nil {
+		log.Printf("Error querying plans: %v", err)
+		writeErrorResponse(w, "Failed to query plans", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var plans []map[string]interface{}
+	for rows.Next() {
+		var id int
+		var fileName, displayName, preview, modifiedAt string
+		var fileSize int64
+
+		err := rows.Scan(&id, &fileName, &displayName, &preview, &fileSize, &modifiedAt)
+		if err != nil {
+			continue
+		}
+
+		plans = append(plans, map[string]interface{}{
+			"id":           id,
+			"file_name":    fileName,
+			"display_name": displayName,
+			"preview":      preview,
+			"file_size":    fileSize,
+			"modified_at":  modifiedAt,
+		})
+	}
+
+	response := map[string]interface{}{
+		"total_count":  count,
+		"total_size":   totalSize,
+		"plans":        plans,
+		"last_indexed": lastIndexed.String,
+	}
+
+	writeJSONResponse(w, response)
+}
+
+// GetPlanDetailV2 returns a specific plan's content from database
+func (h *DataHandler) GetPlanDetailV2(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	idStr := vars["id"]
+
+	if idStr == "" {
+		writeErrorResponse(w, "Plan ID is required", http.StatusBadRequest)
+		return
+	}
+
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		writeErrorResponse(w, "Invalid plan ID", http.StatusBadRequest)
+		return
+	}
+
+	storage, ok := h.storageService.(*service.SQLiteStorageService)
+	if !ok {
+		writeErrorResponse(w, "Storage service not available", http.StatusInternalServerError)
+		return
+	}
+
+	query := `
+		SELECT id, file_name, display_name, content, file_size, modified_at
+		FROM claude_plans
+		WHERE id = ?
+	`
+
+	var fileName, displayName, content, modifiedAt string
+	var fileSize int64
+	var planID int
+
+	err = storage.GetDB().QueryRow(query, id).Scan(&planID, &fileName, &displayName, &content, &fileSize, &modifiedAt)
+	if err == sql.ErrNoRows {
+		writeErrorResponse(w, "Plan not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		log.Printf("Error querying plan %d: %v", id, err)
+		writeErrorResponse(w, "Failed to query plan", http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"id":           planID,
+		"file_name":    fileName,
+		"display_name": displayName,
+		"content":      content,
+		"file_size":    fileSize,
+		"modified_at":  modifiedAt,
+	}
+
+	writeJSONResponse(w, response)
+}
+
+// ReindexTodosV2 triggers manual reindexing of todos and plans
+func (h *DataHandler) ReindexTodosV2(w http.ResponseWriter, r *http.Request) {
+	storage, ok := h.storageService.(*service.SQLiteStorageService)
+	if !ok {
+		writeErrorResponse(w, "Storage service not available", http.StatusInternalServerError)
+		return
+	}
+
+	// Create session data indexer
+	indexer, err := service.NewSessionDataIndexer(storage)
+	if err != nil {
+		log.Printf("Error creating session data indexer: %v", err)
+		writeErrorResponse(w, "Failed to create indexer", http.StatusInternalServerError)
+		return
+	}
+
+	start := time.Now()
+
+	// Index todos
+	filesProcessed, todosIndexed, errors := indexer.IndexTodos()
+
+	// Index plans
+	plansIndexed, planErrors := indexer.IndexPlans()
+	errors = append(errors, planErrors...)
+
+	duration := time.Since(start)
+
+	response := map[string]interface{}{
+		"files_processed": filesProcessed,
+		"todos_indexed":   todosIndexed,
+		"plans_indexed":   plansIndexed,
+		"errors":          errors,
+		"duration":        duration.String(),
+	}
+
+	writeJSONResponse(w, response)
 }

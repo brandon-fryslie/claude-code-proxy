@@ -219,6 +219,7 @@ export function ConversationsPage() {
     <AppLayout
       title="Conversations"
       description="Browse Claude Code conversation logs"
+      activeItem="conversations"
     >
       <div className="flex-1 flex overflow-hidden h-full">
         {/* Left Sidebar - Conversation List */}

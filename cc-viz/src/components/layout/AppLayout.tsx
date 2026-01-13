@@ -6,6 +6,16 @@ import {
   Home,
   MessageSquare,
   ExternalLink,
+  Settings,
+  Bot,
+  Puzzle,
+  FolderKanban,
+  FileText,
+  History,
+  Webhook,
+  MonitorPlay,
+  BarChart3,
+  LayoutDashboard,
 } from 'lucide-react'
 
 interface NavItem {
@@ -15,6 +25,7 @@ interface NavItem {
   badge?: number
   href?: string
   external?: boolean
+  disabled?: boolean
 }
 
 interface NavSection {
@@ -24,9 +35,46 @@ interface NavSection {
 
 const navSections: NavSection[] = [
   {
-    title: 'Tools',
+    title: 'Overview',
     items: [
-      { id: 'conversations', label: 'Conversations', icon: <MessageSquare size={18} /> },
+      { id: 'home', label: 'Home', icon: <LayoutDashboard size={18} />, href: '/cc-viz/' },
+    ],
+  },
+  {
+    title: 'Available',
+    items: [
+      { id: 'conversations', label: 'Conversations', icon: <MessageSquare size={18} />, href: '/cc-viz/conversations' },
+      { id: 'configuration', label: 'Configuration', icon: <Settings size={18} />, href: '/cc-viz/configuration' },
+      { id: 'projects', label: 'Projects', icon: <FolderKanban size={18} />, href: '/cc-viz/projects' },
+    ],
+  },
+  {
+    title: 'Extensibility',
+    items: [
+      { id: 'agents', label: 'Agents', icon: <Bot size={18} />, disabled: true },
+      { id: 'commands', label: 'Commands', icon: <Bot size={18} />, disabled: true },
+      { id: 'skills', label: 'Skills', icon: <Bot size={18} />, disabled: true },
+      { id: 'plugins', label: 'Plugins', icon: <Puzzle size={18} />, disabled: true },
+      { id: 'hooks', label: 'Hooks', icon: <Webhook size={18} />, disabled: true },
+    ],
+  },
+  {
+    title: 'Data',
+    items: [
+      { id: 'session-data', label: 'Session Data', icon: <FileText size={18} />, disabled: true },
+      { id: 'history', label: 'History', icon: <History size={18} />, disabled: true },
+      { id: 'telemetry', label: 'Telemetry & Stats', icon: <BarChart3 size={18} />, disabled: true },
+    ],
+  },
+  {
+    title: 'Integration',
+    items: [
+      { id: 'ide', label: 'IDE Integration', icon: <MonitorPlay size={18} />, disabled: true },
+    ],
+  },
+  {
+    title: 'Links',
+    items: [
       { id: 'dashboard', label: 'Back to Dashboard', icon: <Home size={18} />, href: '/dashboard/', external: false },
     ],
   },
@@ -182,12 +230,13 @@ interface AppLayoutProps {
   title: string
   description?: string
   actions?: React.ReactNode
+  activeItem?: string
 }
 
-export function AppLayout({ children, title, description, actions }: AppLayoutProps) {
+export function AppLayout({ children, title, description, actions, activeItem = 'home' }: AppLayoutProps) {
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--color-bg-primary)]">
-      <Sidebar activeItem="conversations" />
+      <Sidebar activeItem={activeItem} />
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <PageHeader title={title} description={description} actions={actions} />
         <div className="flex-1 overflow-auto">

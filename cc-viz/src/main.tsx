@@ -2,6 +2,9 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClientProvider, QueryClient } from '@tanstack/react-query'
 import { ConversationsPage } from './pages/Conversations'
+import { HomePage } from './pages/Home'
+import { ConfigurationPage } from './pages/Configuration'
+import { ProjectsPage } from './pages/Projects'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -14,10 +17,29 @@ const queryClient = new QueryClient({
   },
 })
 
+// Simple URL-based routing
+function App() {
+  const path = window.location.pathname
+
+  // Route based on path
+  if (path === '/cc-viz/conversations' || path === '/cc-viz/conversations/') {
+    return <ConversationsPage />
+  }
+  if (path === '/cc-viz/configuration' || path === '/cc-viz/configuration/') {
+    return <ConfigurationPage />
+  }
+  if (path === '/cc-viz/projects' || path === '/cc-viz/projects/') {
+    return <ProjectsPage />
+  }
+
+  // Default to home page for /cc-viz/ or /cc-viz
+  return <HomePage />
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <ConversationsPage />
+      <App />
     </QueryClientProvider>
   </React.StrictMode>,
 )

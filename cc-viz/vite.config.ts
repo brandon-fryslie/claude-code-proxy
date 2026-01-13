@@ -5,13 +5,14 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  base: '/cc-viz/',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
   },
   server: {
-    port: 8174,
+    port: 8182,
     allowedHosts: true,
     host: "0.0.0.0",
     proxy: {

@@ -114,6 +114,11 @@ func main() {
 	r.HandleFunc("/api/v2/config/providers", h.GetProvidersV2).Methods("GET")
 	r.HandleFunc("/api/v2/config/subagents", h.GetSubagentConfigV2).Methods("GET")
 
+	// CC-VIZ Claude Directory API
+	r.HandleFunc("/api/v2/claude/config", h.GetClaudeConfigV2).Methods("GET")
+	r.HandleFunc("/api/v2/claude/projects", h.GetClaudeProjectsV2).Methods("GET")
+	r.HandleFunc("/api/v2/claude/projects/{id}", h.GetClaudeProjectDetailV2).Methods("GET")
+
 	r.NotFoundHandler = http.HandlerFunc(h.NotFound)
 
 	// Get port from environment or default
