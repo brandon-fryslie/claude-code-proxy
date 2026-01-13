@@ -1,15 +1,15 @@
 # CC-VIZ Roadmap: The Claude Code Data Cockpit
 
-**Last updated**: 2026-01-12
+**Last updated**: 2026-01-13
 **Vision**: Transform CC-VIZ into a unified data cockpit where every piece of ~/.claude data is visible, connected, and navigable.
 
 ---
 
-## Phase 1: Graph Foundation 🟢 [ACTIVE]
+## Phase 1: Graph Foundation ✅ [COMPLETE - In Final Validation]
 
 **Goal**: Build the underlying infrastructure for interconnected data visualization. Establish database schema, indexing patterns, and relationship linking.
 
-**Status**: 1/4 completed | Session Data page launched
+**Status**: 2/4 completed | P0 & P1 verified, P2 performance validation in progress
 
 ### Topics
 
@@ -22,15 +22,19 @@
   - Session ID / Agent ID display with verification
 - **Reference**: `.agent_planning/cc-viz-roadmap/`
 
-#### 🔄 conversation-indexer [IN_PROGRESS]
+#### ✅ conversation-indexer [COMPLETED]
 - **Epic**: CONVERSATION-INDEXER-1
-- **Status**: Planning
+- **Status**: COMPLETE - P0, P1 Done, P2 Final Validation
 - **Description**: Parse JSONL conversations, extract messages, tool calls, timestamps
-- **Includes**:
-  - Parse ~/.claude/projects/{path}/{session}.jsonl
+- **What's Done**:
+  - ✅ P0: FTS5 blocker fixed (conditional build tags, all 24 tests passing)
+  - ✅ P1: Integration tests with real data (102 files, 9,363 messages indexed)
+  - 🔄 P2: Performance validation on 3,927+ files (in progress)
+  - Parse ~/./claude/projects/{path}/{session}.jsonl
   - Extract and index tool calls (Read, Write, Bash, etc.)
   - Build timestamp correlations
   - Store in SQLite with FTS5 for search
+- **Reference**: `.agent_planning/cc-viz-phase1-foundation/`
 
 #### 💡 subagent-graph [PROPOSED]
 - **Epic**: SUBAGENT-GRAPH-1
@@ -55,11 +59,11 @@
 
 ---
 
-## Phase 2: Search & Discovery 🔄 [QUEUED]
+## Phase 2: Search & Discovery 🔄 [READY - NEXT]
 
 **Goal**: Enable users to find anything across all data sources with unified search.
 
-**Status**: 0/3 completed
+**Status**: 0/3 completed | UNBLOCKED - Ready to start once P2 performance validation completes
 
 ### Topics
 
@@ -228,7 +232,17 @@ Relationship Linker ←─────┘
 
 ## Next Steps
 
-1. **Select next feature**: Choose from Phase 1 topics (conversation-indexer, subagent-graph, or relationship-linker)
-2. **Create implementation plan**: Run `/do:plan <feature-name>` to generate detailed plan
-3. **Track progress**: Use beads (`bd create`, `bd update`) for multi-session work
-4. **Iterate**: Each phase builds on previous - maintain dependency order
+**Immediate (In Progress)**:
+1. ✅ Complete P2 performance validation (currently running)
+2. ✅ Verify all 3,927+ JSONL files index successfully
+3. ✅ Confirm database size and search performance within targets
+
+**After Phase 1 Complete**:
+1. Plan and implement **Phase 1c: Subagent Graph** (1-2 hours)
+2. Plan and implement **Phase 2: Unified Search** (4-6 hours)
+3. Begin **Phase 3: User Features** (Time Machine, Activity Dashboard, etc.)
+
+**Tracking**:
+- All work tracked in beads for persistence across sessions
+- Plans in `.agent_planning/cc-viz-phase1-foundation/` and future phase directories
+- Status updated in this ROADMAP after each phase completion
