@@ -100,6 +100,10 @@ func (s *SQLiteStorageService) createTables() error {
 		return err
 	}
 
+	// ALWAYS run Claude session data migrations (todos, plans)
+	if err := s.runClaudeSessionDataMigrations(); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -244,6 +248,110 @@ func (s *SQLiteStorageService) runConversationSearchMigrations() error {
 		}
 
 		log.Println("✅ Created conversation_messages table")
+	}
+
+	return nil
+}
+
+// runClaudeSessionDataMigrations creates tables for todos and plans
+func (s *SQLiteStorageService) runClaudeSessionDataMigrations() error {
+	// Check if claude_todos table exists
+	var todosExists int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='claude_todos'").Scan(&todosExists)
+	if err != nil {
+		return fmt.Errorf("failed to check if claude_todos table exists: %w", err)
+	}
+
+	if todosExists == 0 {
+		// Create claude_todos table
+		todosSchema := `
+		CREATE TABLE claude_todos (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_uuid TEXT NOT NULL,
+			agent_uuid TEXT,
+			file_path TEXT NOT NULL,
+			content TEXT NOT NULL,
+			status TEXT NOT NULL,
+			active_form TEXT,
+			item_index INTEGER NOT NULL,
+			modified_at DATETIME NOT NULL,
+			indexed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(file_path, item_index)
+		);
+
+		CREATE INDEX idx_todos_session ON claude_todos(session_uuid);
+		CREATE INDEX idx_todos_status ON claude_todos(status);
+		CREATE INDEX idx_todos_modified ON claude_todos(modified_at);
+		`
+
+		if _, err := s.db.Exec(todosSchema); err != nil {
+			return fmt.Errorf("failed to create claude_todos table: %w", err)
+		}
+
+		log.Println("✅ Created claude_todos table")
+	}
+
+	// Check if claude_todo_sessions table exists
+	var todoSessionsExists int
+	err = s.db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='claude_todo_sessions'").Scan(&todoSessionsExists)
+	if err != nil {
+		return fmt.Errorf("failed to check if claude_todo_sessions table exists: %w", err)
+	}
+
+	if todoSessionsExists == 0 {
+		// Create claude_todo_sessions table
+		todoSessionsSchema := `
+		CREATE TABLE claude_todo_sessions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			session_uuid TEXT NOT NULL,
+			agent_uuid TEXT,
+			file_path TEXT UNIQUE NOT NULL,
+			file_size INTEGER NOT NULL,
+			todo_count INTEGER NOT NULL,
+			pending_count INTEGER NOT NULL,
+			in_progress_count INTEGER NOT NULL,
+			completed_count INTEGER NOT NULL,
+			modified_at DATETIME NOT NULL,
+			indexed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+		`
+
+		if _, err := s.db.Exec(todoSessionsSchema); err != nil {
+			return fmt.Errorf("failed to create claude_todo_sessions table: %w", err)
+		}
+
+		log.Println("✅ Created claude_todo_sessions table")
+	}
+
+	// Check if claude_plans table exists
+	var plansExists int
+	err = s.db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='claude_plans'").Scan(&plansExists)
+	if err != nil {
+		return fmt.Errorf("failed to check if claude_plans table exists: %w", err)
+	}
+
+	if plansExists == 0 {
+		// Create claude_plans table
+		plansSchema := `
+		CREATE TABLE claude_plans (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			file_name TEXT UNIQUE NOT NULL,
+			display_name TEXT NOT NULL,
+			content TEXT NOT NULL,
+			preview TEXT NOT NULL,
+			file_size INTEGER NOT NULL,
+			modified_at DATETIME NOT NULL,
+			indexed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE INDEX idx_plans_modified ON claude_plans(modified_at);
+		`
+
+		if _, err := s.db.Exec(plansSchema); err != nil {
+			return fmt.Errorf("failed to create claude_plans table: %w", err)
+		}
+
+		log.Println("✅ Created claude_plans table")
 	}
 
 	return nil
