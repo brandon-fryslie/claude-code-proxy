@@ -3,6 +3,11 @@ import type {
   Conversation,
   ConversationDetail,
   ConversationMessagesResponse,
+  TodosResponse,
+  TodoDetailResponse,
+  PlansResponse,
+  PlanDetailResponse,
+  ReindexResponse,
 } from './types'
 
 // Use V2 API for cleaner responses
@@ -74,4 +79,42 @@ export function useConversationMessages(
     queryFn: () => fetchAPI<ConversationMessagesResponse>(`/conversations/${id}/messages${queryString}`),
     enabled: !!id,
   })
+}
+
+// ============================================================================
+// Session Data Queries (Todos & Plans)
+// ============================================================================
+
+export function useTodos() {
+  return useQuery({
+    queryKey: ['claude-todos'],
+    queryFn: () => fetchAPI<TodosResponse>('/claude/todos'),
+  })
+}
+
+export function useTodoDetail(sessionUuid: string | null) {
+  return useQuery({
+    queryKey: ['claude-todos', sessionUuid],
+    queryFn: () => fetchAPI<TodoDetailResponse>(`/claude/todos/${sessionUuid}`),
+    enabled: !!sessionUuid,
+  })
+}
+
+export function usePlans() {
+  return useQuery({
+    queryKey: ['claude-plans'],
+    queryFn: () => fetchAPI<PlansResponse>('/claude/plans'),
+  })
+}
+
+export function usePlanDetail(id: number | null) {
+  return useQuery({
+    queryKey: ['claude-plans', id],
+    queryFn: () => fetchAPI<PlanDetailResponse>(`/claude/plans/${id}`),
+    enabled: id !== null,
+  })
+}
+
+export async function reindexSessionData(): Promise<ReindexResponse> {
+  return fetchAPI<ReindexResponse>('/claude/todos/reindex', { method: 'POST' })
 }

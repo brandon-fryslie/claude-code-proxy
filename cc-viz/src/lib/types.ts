@@ -84,3 +84,80 @@ export interface ConversationDetail {
   messageCount: number
   messages: ClaudeCodeMessage[]
 }
+
+// ============================================================================
+// Session Data Types (Todos & Plans)
+// ============================================================================
+
+export interface TodoStatusCounts {
+  pending: number
+  in_progress: number
+  completed: number
+}
+
+export interface TodoSession {
+  session_uuid: string
+  agent_uuid: string
+  file_path: string
+  file_size: number
+  todo_count: number
+  pending_count: number
+  in_progress_count: number
+  completed_count: number
+  modified_at: string
+}
+
+export interface TodosResponse {
+  total_files: number
+  non_empty_files: number
+  status_breakdown: TodoStatusCounts
+  sessions: TodoSession[]
+  last_indexed: string
+}
+
+export interface TodoItem {
+  content: string
+  status: 'pending' | 'in_progress' | 'completed'
+  active_form: string
+}
+
+export interface TodoDetailResponse {
+  session_uuid: string
+  agent_uuid: string
+  file_path: string
+  modified_at: string
+  todos: TodoItem[]
+}
+
+export interface PlanSummary {
+  id: number
+  file_name: string
+  display_name: string
+  preview: string
+  file_size: number
+  modified_at: string
+}
+
+export interface PlansResponse {
+  total_count: number
+  total_size: number
+  plans: PlanSummary[]
+  last_indexed: string
+}
+
+export interface PlanDetailResponse {
+  id: number
+  file_name: string
+  display_name: string
+  content: string
+  file_size: number
+  modified_at: string
+}
+
+export interface ReindexResponse {
+  files_processed: number
+  todos_indexed: number
+  plans_indexed: number
+  errors: string[]
+  duration: string
+}
