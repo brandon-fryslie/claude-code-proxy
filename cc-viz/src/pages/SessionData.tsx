@@ -165,10 +165,10 @@ export default function SessionData() {
                 ) : (
                   filteredSessions.map((session: TodoSession) => (
                     <button
-                      key={session.session_uuid}
-                      onClick={() => setSelectedSession(session.session_uuid)}
+                      key={session.file_path}
+                      onClick={() => setSelectedSession(session.agent_uuid)}
                       className={`w-full text-left p-4 hover:bg-gray-50 transition-colors ${
-                        selectedSession === session.session_uuid ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                        selectedSession === session.agent_uuid ? 'bg-blue-50 border-l-4 border-blue-500' : ''
                       }`}
                     >
                       <div className="flex items-start justify-between">
