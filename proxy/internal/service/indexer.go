@@ -243,6 +243,11 @@ func (ci *ConversationIndexer) indexFile(filePath string) error {
 	defer msgStmt.Close()
 
 	for _, msg := range conv.Messages {
+		// Skip messages without UUIDs (metadata messages like file-history-snapshot)
+		if msg.UUID == "" {
+			continue
+		}
+
 		// Extract content for FTS
 		text, toolNames, _ := ExtractMessageContent(msg)
 		toolNamesStr := strings.Join(toolNames, " ")
