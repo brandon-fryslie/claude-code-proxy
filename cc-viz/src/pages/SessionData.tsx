@@ -173,7 +173,12 @@ export default function SessionData() {
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
-                          <div className="font-mono text-sm text-gray-900">{truncateUuid(session.session_uuid)}</div>
+                          <div className="font-mono text-sm text-gray-900">
+                            {truncateUuid(session.session_uuid)}
+                            {session.agent_uuid !== session.session_uuid && (
+                              <span className="text-gray-400 ml-1">/{truncateUuid(session.agent_uuid)}</span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
                             <span>{session.todo_count} todos</span>
                             <span className="flex items-center gap-1">
