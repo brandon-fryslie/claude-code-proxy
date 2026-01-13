@@ -105,7 +105,9 @@
 
 **Goal**: Transform raw data into understanding and visual exploration.
 
-**Status**: 0/4 completed
+**Status**: 0/5 completed
+
+**Note**: Token Economics Dashboard is high-priority (product-market fit) - include in Phase 3 planning
 
 ### Topics
 
@@ -152,6 +154,22 @@
   - Safe-to-delete identification
   - Bulk actions: archive, compress, clean, export
   - Smart suggestions for cleanup
+
+#### 💡 token-economics [PROPOSED] ⭐ HIGH PRIORITY
+- **Epic**: TOKEN-ECONOMICS-1
+- **Status**: Proposed
+- **Priority**: HIGH (product-market fit for power users)
+- **Description**: Understand token consumption patterns and detect anomalies
+- **Includes**:
+  - Daily/weekly/monthly token burn trends
+  - Per-project token cost breakdown
+  - Per-model token cost breakdown
+  - Input vs output ratio tracking and drift detection
+  - Anomaly alerts ("tokens 2x normal this week")
+  - Per-tool cost analysis (tokens per call by tool type)
+  - Session efficiency metrics
+  - "Did I break something?" diagnostics
+- **Why**: Every LLM power user needs to track token spend and catch unexpected cost spikes
 
 ---
 
