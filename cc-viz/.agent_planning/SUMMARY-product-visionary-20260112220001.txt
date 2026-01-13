@@ -1,0 +1,3 @@
+Agent: product-visionary | 20260112220001
+Proposal: FEATURE_PROPOSAL_cc-viz-ultimate-vision.md | Ideas: 15 brainstormed -> 8 selected
+Theme: Transform ~/.claude data into navigable, interconnected cockpit | User Impact: high
