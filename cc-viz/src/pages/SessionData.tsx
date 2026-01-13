@@ -185,10 +185,21 @@ export default function SessionData() {
                                   ? '#9ca3af' // gray - empty
                                   : '#f59e0b' // amber - has pending
                               }}
+                              title={
+                                session.completed_count === session.todo_count && session.todo_count > 0
+                                  ? 'All completed'
+                                  : session.in_progress_count > 0
+                                  ? 'In progress'
+                                  : session.todo_count === 0
+                                  ? 'Empty'
+                                  : 'Has pending'
+                              }
                             />
-                            <span>{truncateUuid(session.session_uuid)}</span>
+                            <span title="Session ID">{truncateUuid(session.session_uuid)}</span>
                             {session.agent_uuid !== session.session_uuid && (
-                              <span className="text-gray-500">/ {truncateUuid(session.agent_uuid)}</span>
+                              <span className="text-blue-500" title="Subagent ID">
+                                / {truncateUuid(session.agent_uuid)}
+                              </span>
                             )}
                           </div>
                           <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
