@@ -119,6 +119,13 @@ func main() {
 	r.HandleFunc("/api/v2/claude/projects", h.GetClaudeProjectsV2).Methods("GET")
 	r.HandleFunc("/api/v2/claude/projects/{id}", h.GetClaudeProjectDetailV2).Methods("GET")
 
+	// CC-VIZ Session Data API
+	r.HandleFunc("/api/v2/claude/todos", h.GetTodosV2).Methods("GET")
+	r.HandleFunc("/api/v2/claude/todos/reindex", h.ReindexTodosV2).Methods("POST")
+	r.HandleFunc("/api/v2/claude/todos/{session_uuid}", h.GetTodoDetailV2).Methods("GET")
+	r.HandleFunc("/api/v2/claude/plans", h.GetPlansV2).Methods("GET")
+	r.HandleFunc("/api/v2/claude/plans/{id}", h.GetPlanDetailV2).Methods("GET")
+
 	r.NotFoundHandler = http.HandlerFunc(h.NotFound)
 
 	// Get port from environment or default
